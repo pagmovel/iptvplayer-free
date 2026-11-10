@@ -75,4 +75,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    // XmlPullParserFactory não roda fora do Android/Robolectric; kxml2 fornece a
+    // implementação org.xmlpull.v1 para o teste JVM puro de LeitorXmltvTest (T8).
+    testImplementation(libs.kxml2)
 }
