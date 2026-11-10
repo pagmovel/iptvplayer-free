@@ -168,3 +168,10 @@ BASE antes da T6: `6334d39`.
   teste dedicado de vazio/nulo/ausente (helper compartilhado, risco baixo). Confirmei eu
   mesmo (`git tag`, `@{u}`) que não há push nem tag.
 - Task 6: complete (commits 6334d39..0e3a45a, review clean, 2 minors deferred).
+
+BASE antes da T5: `3d816c3`.
+
+- Task 5: despachado (implementador, modelo sonnet). Brief: `task-5-brief.md`. Relatório
+  esperado em `task-5-report.md`. Avisado sobre a reordenação (T5 depois de T6/T7) e sobre o
+  bloqueio do Maven Central (já resolvido na causa raiz, mas pode persistir no classpath do
+  módulo).
