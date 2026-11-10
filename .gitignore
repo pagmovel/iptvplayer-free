@@ -9,3 +9,13 @@ temp/
 
 # Configuração de IDE: preferência de máquina, não do projeto
 .vscode/
+
+# Build Android/Gradle: gerado, não versionado (o wrapper em gradle/wrapper/ fica fora disso)
+build/
+.gradle/
+local.properties
+*.apk
+*.aab
+.cxx/
+captures/
+.idea/

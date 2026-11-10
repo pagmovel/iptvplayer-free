@@ -1,0 +1,52 @@
+[versions]
+# Fonte: maven-metadata.xml de cada grupo em dl.google.com/repo1.maven.org, consultado em 2026-11-10
+# (última versão estável disponível nessa data, sem alpha/beta/rc).
+agp = "9.5.1"
+kotlin = "2.4.21"
+composeBom = "2026.09.00"
+coreKtx = "1.19.1"
+activityCompose = "1.13.0"
+lifecycleRuntimeKtx = "2.11.0"
+room = "2.8.5"
+workRuntime = "2.12.0"
+okhttp = "5.5.1"
+kotlinxSerializationJson = "1.12.0"
+kotlinxCoroutinesTest = "1.11.0"
+robolectric = "4.17"
+kxml2 = "2.2.2"
+junit = "4.13.2"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+
+# BOM do Compose: alinha as versões de todas as libs androidx.compose.* abaixo.
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+# Usadas só a partir das próximas tarefas (persistência, download em segundo plano, rede e
+# parsing); declaradas já aqui para as próximas tarefas não precisarem mexer em versões.
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+# Sem alias para "org.jetbrains.kotlin.android": a partir do AGP 9.0 o Kotlin já vem
+# embutido (built-in Kotlin) e aplicar esse plugin manualmente quebra o build.
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
