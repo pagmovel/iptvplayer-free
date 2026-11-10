@@ -3,6 +3,10 @@
 # (última versão estável disponível nessa data, sem alpha/beta/rc).
 agp = "9.5.1"
 kotlin = "2.4.21"
+# KSP não acompanha mais o número de versão do Kotlin (desde a 2.3.0, numeração própria);
+# 2.3.13 é a última estável em dl.google.com/com/google/devtools/ksp na mesma data do
+# catálogo (verificado em releases do GitHub google/ksp em 2026-11-10).
+ksp = "2.3.13"
 composeBom = "2026.09.00"
 coreKtx = "1.19.1"
 activityCompose = "1.13.0"
@@ -50,3 +54,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 # embutido (built-in Kotlin) e aplicar esse plugin manualmente quebra o build.
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

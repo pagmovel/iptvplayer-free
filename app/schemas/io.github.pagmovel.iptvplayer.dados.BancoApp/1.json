@@ -1,0 +1,425 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "ca6fc2f66847687128962405e3ee529b",
+    "entities": [
+      {
+        "tableName": "Categoria",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `tipo` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `nome` TEXT NOT NULL, PRIMARY KEY(`contaId`, `tipo`, `categoriaId`))",
+        "fields": [
+          {
+            "fieldPath": "contaId",
+            "columnName": "contaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tipo",
+            "columnName": "tipo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoriaId",
+            "columnName": "categoriaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contaId",
+            "tipo",
+            "categoriaId"
+          ]
+        }
+      },
+      {
+        "tableName": "Canal",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `icone` TEXT, `epgId` TEXT, `numero` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
+        "fields": [
+          {
+            "fieldPath": "contaId",
+            "columnName": "contaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "streamId",
+            "columnName": "streamId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoriaId",
+            "columnName": "categoriaId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "icone",
+            "columnName": "icone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "epgId",
+            "columnName": "epgId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "numero",
+            "columnName": "numero",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contaId",
+            "streamId"
+          ]
+        }
+      },
+      {
+        "tableName": "Filme",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `extensao` TEXT, `ano` INTEGER, `nota` REAL, `adicionadoEm` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
+        "fields": [
+          {
+            "fieldPath": "contaId",
+            "columnName": "contaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "streamId",
+            "columnName": "streamId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoriaId",
+            "columnName": "categoriaId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "capa",
+            "columnName": "capa",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "extensao",
+            "columnName": "extensao",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ano",
+            "columnName": "ano",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "nota",
+            "columnName": "nota",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "adicionadoEm",
+            "columnName": "adicionadoEm",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contaId",
+            "streamId"
+          ]
+        }
+      },
+      {
+        "tableName": "Serie",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `seriesId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `sinopse` TEXT, `ano` INTEGER, `nota` REAL, `modificadaEm` INTEGER, PRIMARY KEY(`contaId`, `seriesId`))",
+        "fields": [
+          {
+            "fieldPath": "contaId",
+            "columnName": "contaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seriesId",
+            "columnName": "seriesId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoriaId",
+            "columnName": "categoriaId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "capa",
+            "columnName": "capa",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sinopse",
+            "columnName": "sinopse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ano",
+            "columnName": "ano",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "nota",
+            "columnName": "nota",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "modificadaEm",
+            "columnName": "modificadaEm",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contaId",
+            "seriesId"
+          ]
+        }
+      },
+      {
+        "tableName": "Programa",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `epgId` TEXT NOT NULL, `inicio` INTEGER NOT NULL, `fim` INTEGER NOT NULL, `titulo` TEXT NOT NULL, `descricao` TEXT, PRIMARY KEY(`contaId`, `epgId`, `inicio`))",
+        "fields": [
+          {
+            "fieldPath": "contaId",
+            "columnName": "contaId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epgId",
+            "columnName": "epgId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inicio",
+            "columnName": "inicio",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fim",
+            "columnName": "fim",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titulo",
+            "columnName": "titulo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "descricao",
+            "columnName": "descricao",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contaId",
+            "epgId",
+            "inicio"
+          ]
+        }
+      },
+      {
+        "tableName": "Conta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nome` TEXT NOT NULL, `servidor` TEXT NOT NULL, `usuario` TEXT NOT NULL, `senhaCifrada` BLOB NOT NULL, `ativa` INTEGER NOT NULL, `ultimaCargaEm` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "servidor",
+            "columnName": "servidor",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usuario",
+            "columnName": "usuario",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senhaCifrada",
+            "columnName": "senhaCifrada",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ativa",
+            "columnName": "ativa",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ultimaCargaEm",
+            "columnName": "ultimaCargaEm",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "CanalFts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Canal`)",
+        "fields": [
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "Canal",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": [
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_UPDATE BEFORE UPDATE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_DELETE BEFORE DELETE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_UPDATE AFTER UPDATE ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_INSERT AFTER INSERT ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
+        ]
+      },
+      {
+        "tableName": "FilmeFts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Filme`)",
+        "fields": [
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "Filme",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": [
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_UPDATE BEFORE UPDATE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_DELETE BEFORE DELETE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_UPDATE AFTER UPDATE ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_INSERT AFTER INSERT ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
+        ]
+      },
+      {
+        "tableName": "SerieFts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Serie`)",
+        "fields": [
+          {
+            "fieldPath": "nome",
+            "columnName": "nome",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "Serie",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": [
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_UPDATE BEFORE UPDATE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_DELETE BEFORE DELETE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_UPDATE AFTER UPDATE ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_INSERT AFTER INSERT ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ca6fc2f66847687128962405e3ee529b')"
+    ]
+  }
+}
