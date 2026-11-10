@@ -223,3 +223,36 @@ BASE antes da T8: `b79b812`.
   implícito de `<programme>` truncado, aceito silenciosamente — decisão deliberada, sem teste
   do brief que exija o contrário.
 - Task 8: complete (commits b79b812..6781475, review clean, 3 minors deferred).
+
+BASE antes da T9: `07d6f3d`.
+
+- Task 9: despachado (implementador, modelo sonnet). Brief: `task-9-brief.md`. Relatório
+  esperado em `task-9-report.md`. Avisado que esta tarefa usa Robolectric de verdade (não só
+  de passagem) e pode não ter o workaround do classpath manual disponível — instruído a
+  reportar BLOCKED/DONE_WITH_CONCERNS com honestidade se não conseguir verificar de fato.
+- Task 9: **DONE_WITH_CONCERNS, não comitado.** Código escrito (`carga/CargaCatalogo.kt`,
+  `carga/CargaCatalogoTest.kt`), compilou sem erro 2x contra as assinaturas reais de T5-T8, mas
+  a suíte nunca chegou a rodar (nem "ver falhar" nem "ver passar") — bloqueio do Maven Central
+  (429) ainda ativo, e aqui (diferente de T6/T8) o workaround de classpath manual não serve:
+  faltam também bytebuddy/objenesis/android-all em cache, que o Robolectric precisa de verdade
+  para simular o Android (não é só resolução de classpath de passagem). Implementador agiu
+  certo: não comitou código não verificado. Honrando a mesma regra, não vou comitar o código
+  da T9 até rodar a verificação de fato.
+- Tentei desbloquear: achei 2 mirrors públicos do Maven Central que respondem 200 para o
+  artefato bloqueado (`maven.aliyun.com`, e o mirror oficial do Google
+  `maven-central.storage-download.googleapis.com`, confirmados com `curl -I`). Adicionei o
+  mirror do Google como repositório extra em `settings.gradle.kts`. **Não funcionou**: o
+  Gradle continuou tentando só `repo.maven.apache.org` e falhando com 429 — provavelmente
+  porque, resolvido o POM/metadado no `mavenCentral()`, o Gradle não tenta o próximo
+  repositório declarado para o artefato binário do mesmo módulo (comportamento padrão de
+  resolução, sem regra de conteúdo exclusivo por repositório configurada). Deixei o mirror no
+  `settings.gradle.kts` mesmo assim (não atrapalha, pode ajudar noutro cenário), mas não é a
+  solução deste bloqueio.
+- `Ruling:` o bloqueio é fixo no tempo (confirmado: `retry-after` recalculado bate com o mesmo
+  horário absoluto nas duas medições), libera por volta de **2026-11-11 18:07 GMT** (~15:07
+  horário de Brasília). T9, T10 e T11 usam Robolectric de verdade (não só de passagem) e vão
+  bater no mesmo bloqueio. Sessão pausada aqui a pedido do dono ("retomar amanhã"); T9 fica
+  **pendente** (nem concluída) até rodar a verificação de fato. Próxima sessão: tentar de novo
+  depois do horário acima: se ainda bloqueado, considerar repositório com
+  `exclusiveContent`/`content { includeGroup(...) }` apontando esse grupo específico para o
+  mirror, em vez de só adicionar como extra.
