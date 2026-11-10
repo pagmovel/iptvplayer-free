@@ -103,3 +103,34 @@ BASE antes da T4: `5dd7d0b`.
   técnica (não é defeito): usou `java.net.URL` em vez de `java.net.URI` como o brief sugeria —
   decisão válida, sem impacto.
 - Task 4: complete (commits 5dd7d0b..0fe2a79, review clean).
+
+BASE antes da T7: `6c1a8b9`.
+
+- Task 7: despachado (implementador, modelo sonnet). Brief: `task-7-brief.md`. Relatório
+  esperado em `task-7-report.md`. Aviso dado sobre a reordenação (T7 antes de T5/T6).
+- Task 7: implementado (commit `6876c13`). 5/5 testes. Atribuição correta desta vez
+  (`Co-Authored-By: Claude Sonnet 5`). Descoberta real registrada pelo implementador: a
+  sintaxe do brief `"palavra"*` (asterisco fora das aspas) não aplica prefixo no FTS4 —
+  a forma correta é `"palavra*"` (asterisco dentro), confirmado em sqlite.org/fts3.html e
+  pelo teste de busca por prefixo falhando/passando nas duas formas.
+- Task 7: pacote de revisão gerado (`review-6c1a8b9..6876c13.diff`), revisor despachado
+  (modelo sonnet).
+- Task 7: revisão: ✅ spec conforme (entidades, FTS, DAO, testes literais, isolamento por
+  conta todos corretos). ❌ 1 achado **Importante**: `Fts.kt`/`CatalogoDao.kt` chamam
+  `reconstruirIndice*` (FTS `rebuild`) manualmente depois de inserir/apagar, com comentário
+  dizendo que "o Room não sincroniza a FTS sozinho" — **falso**: o próprio schema exportado
+  no diff mostra os triggers `room_fts_content_sync_*` que o Room gera para
+  `@Fts4(contentEntity=...)`, e o revisor confirmou rodando em SQLite isolado que a FTS já
+  fica correta sem o rebuild manual. Custo real: rebuild completo dos 3 índices (de todas as
+  contas, não só a alterada) a cada carga de catálogo — e a T9 chama esse DAO dentro de
+  `withTransaction`, então o custo se repete a cada carga. 2 achados menores (rebuild rodando
+  em lista vazia; escape de aspas no termo FTS, sem problema real).
+- Task 7: fix round 1/5 — implementador original corrigiu (commit `9862d02`): removeu
+  `reconstruirIndiceCanais/Filmes/Series()` e os métodos `*Bruto`, voltou a `@Insert` direto,
+  corrigiu o comentário de `Fts.kt`. Verificou de forma independente antes de aplicar (abriu
+  o próprio schema exportado e confirmou os triggers `contentSyncTriggers` do Room). 5/5
+  testes continuam passando. Re-revisão focada despachada (modelo haiku,
+  `review-6876c13..9862d02.diff`).
+- Task 7: re-revisão — todos os 3 achados ADDRESSED, nenhuma quebra nova. Fix round 1/5
+  fechou o loop.
+- Task 7: complete (commits 6c1a8b9..9862d02, fix round 1/5, review clean).

@@ -1,0 +1,955 @@
+# Review package: 6c1a8b9..6876c13
+
+## Commits
+6876c13 feat: banco local com busca FTS sem acento
+
+## Files changed
+ app/build.gradle.kts                               |  13 +
+ .../1.json                                         | 425 +++++++++++++++++++++
+ .../github/pagmovel/iptvplayer/dados/BancoApp.kt   |  37 ++
+ .../pagmovel/iptvplayer/dados/CatalogoDao.kt       | 126 ++++++
+ .../github/pagmovel/iptvplayer/dados/Entidades.kt  |  82 ++++
+ .../io/github/pagmovel/iptvplayer/dados/Fts.kt     |  31 ++
+ .../pagmovel/iptvplayer/dados/CatalogoDaoTest.kt   |  88 +++++
+ build.gradle.kts                                   |   1 +
+ gradle/libs.versions.toml                          |   5 +
+ 9 files changed, 808 insertions(+)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index fc035a5..afec02d 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -1,14 +1,15 @@
+ plugins {
+     alias(libs.plugins.android.application)
+     alias(libs.plugins.kotlin.compose)
+     alias(libs.plugins.kotlin.serialization)
++    alias(libs.plugins.ksp)
+ }
+ 
+ android {
+     namespace = "io.github.pagmovel.iptvplayer"
+ 
+     // 37.2 é a plataforma estável mais recente disponível na imagem cimg/android:2026.10
+     // (confirmado em .superpowers/sdd/.../task-1-report.md: source.properties de android-37.2
+     // tem PreviewSdkInt=0 e CodeName vazio, ou seja, não é preview).
+     compileSdk {
+         version = release(37) {
+@@ -37,25 +38,37 @@ android {
+ 
+     // Built-in Kotlin (AGP 9+) deriva o jvmTarget do Kotlin a partir daqui; não existe mais
+     // o bloco "kotlinOptions" do plugin org.jetbrains.kotlin.android (verificado rodando
+     // o build real: "Unresolved reference 'kotlinOptions'").
+     compileOptions {
+         sourceCompatibility = JavaVersion.VERSION_17
+         targetCompatibility = JavaVersion.VERSION_17
+     }
+ }
+ 
++// Esquema do Room versionado no repositório, para dar suporte a migrações nas próximas
++// versões do banco (ver app/src/main/.../dados/BancoApp.kt).
++ksp {
++    arg("room.schemaLocation", "$projectDir/schemas")
++}
++
+ dependencies {
+     implementation(libs.androidx.core.ktx)
+     implementation(libs.androidx.activity.compose)
+     implementation(libs.androidx.lifecycle.runtime.ktx)
+ 
+     implementation(platform(libs.androidx.compose.bom))
+     implementation(libs.androidx.compose.ui)
+     implementation(libs.androidx.compose.ui.graphics)
+     implementation(libs.androidx.compose.ui.tooling.preview)
+     implementation(libs.androidx.compose.material3)
+     debugImplementation(libs.androidx.compose.ui.tooling)
+     debugImplementation(libs.androidx.compose.ui.test.manifest)
+ 
++    implementation(libs.androidx.room.runtime)
++    implementation(libs.androidx.room.ktx)
++    ksp(libs.androidx.room.compiler)
++
+     testImplementation(libs.junit)
++    testImplementation(libs.robolectric)
++    testImplementation(libs.kotlinx.coroutines.test)
+ }
+diff --git a/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/1.json b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/1.json
+new file mode 100644
+index 0000000..5988199
+--- /dev/null
++++ b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/1.json
+@@ -0,0 +1,425 @@
++{
++  "formatVersion": 1,
++  "database": {
++    "version": 1,
++    "identityHash": "ca6fc2f66847687128962405e3ee529b",
++    "entities": [
++      {
++        "tableName": "Categoria",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `tipo` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `nome` TEXT NOT NULL, PRIMARY KEY(`contaId`, `tipo`, `categoriaId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "tipo",
++            "columnName": "tipo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "tipo",
++            "categoriaId"
++          ]
++        }
++      },
++      {
++        "tableName": "Canal",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `icone` TEXT, `epgId` TEXT, `numero` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "icone",
++            "columnName": "icone",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "numero",
++            "columnName": "numero",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Filme",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `extensao` TEXT, `ano` INTEGER, `nota` REAL, `adicionadoEm` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "extensao",
++            "columnName": "extensao",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "adicionadoEm",
++            "columnName": "adicionadoEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Serie",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `seriesId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `sinopse` TEXT, `ano` INTEGER, `nota` REAL, `modificadaEm` INTEGER, PRIMARY KEY(`contaId`, `seriesId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "seriesId",
++            "columnName": "seriesId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "sinopse",
++            "columnName": "sinopse",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "modificadaEm",
++            "columnName": "modificadaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "seriesId"
++          ]
++        }
++      },
++      {
++        "tableName": "Programa",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `epgId` TEXT NOT NULL, `inicio` INTEGER NOT NULL, `fim` INTEGER NOT NULL, `titulo` TEXT NOT NULL, `descricao` TEXT, PRIMARY KEY(`contaId`, `epgId`, `inicio`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "inicio",
++            "columnName": "inicio",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "fim",
++            "columnName": "fim",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "titulo",
++            "columnName": "titulo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "descricao",
++            "columnName": "descricao",
++            "affinity": "TEXT"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "epgId",
++            "inicio"
++          ]
++        }
++      },
++      {
++        "tableName": "Conta",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nome` TEXT NOT NULL, `servidor` TEXT NOT NULL, `usuario` TEXT NOT NULL, `senhaCifrada` BLOB NOT NULL, `ativa` INTEGER NOT NULL, `ultimaCargaEm` INTEGER)",
++        "fields": [
++          {
++            "fieldPath": "id",
++            "columnName": "id",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "servidor",
++            "columnName": "servidor",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "usuario",
++            "columnName": "usuario",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "senhaCifrada",
++            "columnName": "senhaCifrada",
++            "affinity": "BLOB",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ativa",
++            "columnName": "ativa",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ultimaCargaEm",
++            "columnName": "ultimaCargaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": true,
++          "columnNames": [
++            "id"
++          ]
++        }
++      },
++      {
++        "tableName": "CanalFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Canal`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Canal",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_UPDATE BEFORE UPDATE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_DELETE BEFORE DELETE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_UPDATE AFTER UPDATE ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_INSERT AFTER INSERT ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "FilmeFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Filme`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Filme",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_UPDATE BEFORE UPDATE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_DELETE BEFORE DELETE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_UPDATE AFTER UPDATE ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_INSERT AFTER INSERT ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "SerieFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Serie`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Serie",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_UPDATE BEFORE UPDATE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_DELETE BEFORE DELETE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_UPDATE AFTER UPDATE ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_INSERT AFTER INSERT ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      }
++    ],
++    "setupQueries": [
++      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
++      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ca6fc2f66847687128962405e3ee529b')"
++    ]
++  }
++}
+\ No newline at end of file
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+new file mode 100644
+index 0000000..2b7d980
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+@@ -0,0 +1,37 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import androidx.room.Dao
++import androidx.room.Database
++import androidx.room.RoomDatabase
++
++/** DAO de contas Xtream. Vazio por ora — a T10 preenche os métodos de cadastro/consulta. */
++@Dao
++abstract class ContaDao
++
++/**
++ * Banco local do app: catálogo (categorias, canais, filmes, séries, programação) e contas
++ * Xtream. Versão 1, com esquema exportado para `app/schemas/` (ver `room.schemaLocation`
++ * em `app/build.gradle.kts`) para dar suporte a migrações nas próximas versões.
++ *
++ * Toda troca de catálogo (apagar + reinserir) acontece dentro de `withTransaction { }`,
++ * chamada feita pela T9 — este banco só expõe os DAOs.
++ */
++@Database(
++    entities = [
++        Categoria::class,
++        Canal::class,
++        Filme::class,
++        Serie::class,
++        Programa::class,
++        Conta::class,
++        CanalFts::class,
++        FilmeFts::class,
++        SerieFts::class,
++    ],
++    version = 1,
++    exportSchema = true,
++)
++abstract class BancoApp : RoomDatabase() {
++    abstract fun catalogoDao(): CatalogoDao
++    abstract fun contaDao(): ContaDao
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+new file mode 100644
+index 0000000..fa9ac8e
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+@@ -0,0 +1,126 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import androidx.room.Dao
++import androidx.room.Insert
++import androidx.room.Query
++import androidx.room.Transaction
++
++/** Contagem de itens do catálogo de uma conta, por tipo. */
++data class Contagem(val canais: Int, val filmes: Int, val series: Int, val programas: Int)
++
++/**
++ * Acesso ao catálogo (categorias, canais, filmes, séries e programação) e à busca textual
++ * por nome. Os métodos públicos de inserção em massa já deixam o índice FTS (ver `Fts.kt`)
++ * reconstruído ao final — quem chama não precisa saber que ele existe.
++ */
++@Dao
++abstract class CatalogoDao {
++
++    @Insert
++    abstract suspend fun inserirCategorias(categorias: List<Categoria>)
++
++    @Insert
++    protected abstract suspend fun inserirCanaisBruto(canais: List<Canal>)
++
++    @Query("INSERT INTO CanalFts(CanalFts) VALUES ('rebuild')")
++    protected abstract suspend fun reconstruirIndiceCanais()
++
++    @Transaction
++    open suspend fun inserirCanais(canais: List<Canal>) {
++        inserirCanaisBruto(canais)
++        reconstruirIndiceCanais()
++    }
++
++    @Insert
++    protected abstract suspend fun inserirFilmesBruto(filmes: List<Filme>)
++
++    @Query("INSERT INTO FilmeFts(FilmeFts) VALUES ('rebuild')")
++    protected abstract suspend fun reconstruirIndiceFilmes()
++
++    @Transaction
++    open suspend fun inserirFilmes(filmes: List<Filme>) {
++        inserirFilmesBruto(filmes)
++        reconstruirIndiceFilmes()
++    }
++
++    @Insert
++    protected abstract suspend fun inserirSeriesBruto(series: List<Serie>)
++
++    @Query("INSERT INTO SerieFts(SerieFts) VALUES ('rebuild')")
++    protected abstract suspend fun reconstruirIndiceSeries()
++
++    @Transaction
++    open suspend fun inserirSeries(series: List<Serie>) {
++        inserirSeriesBruto(series)
++        reconstruirIndiceSeries()
++    }
++
++    @Insert
++    abstract suspend fun inserirProgramas(programas: List<Programa>)
++
++    @Query("DELETE FROM Categoria WHERE contaId = :contaId")
++    protected abstract suspend fun apagarCategorias(contaId: Long)
++
++    @Query("DELETE FROM Canal WHERE contaId = :contaId")
++    protected abstract suspend fun apagarCanais(contaId: Long)
++
++    @Query("DELETE FROM Filme WHERE contaId = :contaId")
++    protected abstract suspend fun apagarFilmes(contaId: Long)
++
++    @Query("DELETE FROM Serie WHERE contaId = :contaId")
++    protected abstract suspend fun apagarSeries(contaId: Long)
++
++    // ponytail: reconstrói o índice FTS inteiro (todas as contas) a cada chamada, porque a
++    // troca de catálogo já é um recarregamento completo e pouco frequente; trocar por um
++    // rebuild incremental só se isso aparecer como lento num catálogo real.
++    @Transaction
++    open suspend fun apagarCatalogo(contaId: Long) {
++        apagarCategorias(contaId)
++        apagarCanais(contaId)
++        apagarFilmes(contaId)
++        apagarSeries(contaId)
++        reconstruirIndiceCanais()
++        reconstruirIndiceFilmes()
++        reconstruirIndiceSeries()
++    }
++
++    @Query("DELETE FROM Programa WHERE contaId = :contaId")
++    abstract suspend fun apagarProgramacao(contaId: Long)
++
++    @Query(
++        "SELECT " +
++            "(SELECT COUNT(*) FROM Canal WHERE contaId = :contaId) AS canais, " +
++            "(SELECT COUNT(*) FROM Filme WHERE contaId = :contaId) AS filmes, " +
++            "(SELECT COUNT(*) FROM Serie WHERE contaId = :contaId) AS series, " +
++            "(SELECT COUNT(*) FROM Programa WHERE contaId = :contaId) AS programas",
++    )
++    abstract suspend fun contagem(contaId: Long): Contagem
++
++    // Join por rowid: CanalFts só guarda o nome, então para filtrar por conta (e devolver o
++    // Canal inteiro) é preciso voltar à tabela de origem pelo rowid que as duas compartilham.
++    @Query(
++        "SELECT Canal.* FROM Canal " +
++            "JOIN CanalFts ON CanalFts.rowid = Canal.rowid " +
++            "WHERE Canal.contaId = :contaId AND CanalFts.CanalFts MATCH :termoFts",
++    )
++    protected abstract suspend fun buscarCanaisPorTermoFts(contaId: Long, termoFts: String): List<Canal>
++
++    /** Busca por nome, ignorando acento/maiúscula e aceitando prefixo (útil ao digitar). */
++    suspend fun buscarNomesCanais(contaId: Long, termo: String): List<Canal> {
++        val termoFts = termoParaFts(termo)
++        if (termoFts.isEmpty()) return emptyList()
++        return buscarCanaisPorTermoFts(contaId, termoFts)
++    }
++}
++
++/**
++ * Prepara o termo digitado para o MATCH do FTS4: separa por espaço, escapa aspas e junta
++ * cada palavra como `"palavra*"` — o `*` precisa ficar DENTRO das aspas para valer como
++ * prefixo (https://www.sqlite.org/fts3.html#fts4query, exemplo `"lin* app*"`; `"palavra"*`
++ * com o `*` fora não aplica prefixo — é um erro fácil de cometer e que este comentário
++ * existe para não repetir). O espaço entre os termos é AND implícito no FTS4.
++ */
++private fun termoParaFts(termo: String): String =
++    termo.trim().split(Regex("\\s+"))
++        .filter { it.isNotEmpty() }
++        .joinToString(" ") { "\"${it.replace("\"", "\"\"")}*\"" }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+new file mode 100644
+index 0000000..9cded7f
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+@@ -0,0 +1,82 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import androidx.room.Entity
++import androidx.room.PrimaryKey
++
++/** Tipo de conteúdo de uma categoria/canal Xtream. */
++enum class TipoConteudo { AO_VIVO, FILME, SERIE }
++
++/** Categoria do catálogo (ao vivo, filme ou série) de uma conta. */
++@Entity(primaryKeys = ["contaId", "tipo", "categoriaId"])
++data class Categoria(
++    val contaId: Long,
++    val tipo: TipoConteudo,
++    val categoriaId: Long,
++    val nome: String,
++)
++
++/** Canal de TV ao vivo de uma conta. */
++@Entity(primaryKeys = ["contaId", "streamId"])
++data class Canal(
++    val contaId: Long,
++    val streamId: Long,
++    val nome: String,
++    val categoriaId: Long?,
++    val icone: String?,
++    val epgId: String?,
++    val numero: Int?,
++)
++
++/** Filme (VOD) de uma conta. */
++@Entity(primaryKeys = ["contaId", "streamId"])
++data class Filme(
++    val contaId: Long,
++    val streamId: Long,
++    val nome: String,
++    val categoriaId: Long?,
++    val capa: String?,
++    val extensao: String?,
++    val ano: Int?,
++    val nota: Double?,
++    val adicionadoEm: Long?,
++)
++
++/** Série (VOD) de uma conta. */
++@Entity(primaryKeys = ["contaId", "seriesId"])
++data class Serie(
++    val contaId: Long,
++    val seriesId: Long,
++    val nome: String,
++    val categoriaId: Long?,
++    val capa: String?,
++    val sinopse: String?,
++    val ano: Int?,
++    val nota: Double?,
++    val modificadaEm: Long?,
++)
++
++/**
++ * Entrada da programação (EPG) de um canal. A chave composta (contaId, epgId, inicio) já
++ * serve de índice de busca por canal/horário — não precisa de índice extra.
++ */
++@Entity(primaryKeys = ["contaId", "epgId", "inicio"])
++data class Programa(
++    val contaId: Long,
++    val epgId: String,
++    val inicio: Long,
++    val fim: Long,
++    val titulo: String,
++    val descricao: String?,
++)
++
++/** Conta Xtream cadastrada no app. Preenchida pela T10 (ContaDao). */
++@Entity
++data class Conta(
++    @PrimaryKey(autoGenerate = true) val id: Long = 0,
++    val nome: String,
++    val servidor: String,
++    val usuario: String,
++    val senhaCifrada: ByteArray,
++    val ativa: Boolean,
++    val ultimaCargaEm: Long?,
++)
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt
+new file mode 100644
+index 0000000..77fe7fc
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt
+@@ -0,0 +1,31 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import androidx.room.Entity
++import androidx.room.Fts4
++import androidx.room.FtsOptions
++
++/**
++ * Índices de busca textual (FTS4) do nome de canais, filmes e séries.
++ *
++ * São "external content tables" do SQLite: a tabela FTS não guarda cópia do texto, só o
++ * índice, e lê o nome direto da entidade de origem (`contentEntity`) pelo rowid implícito
++ * que toda tabela SQLite tem (mesmo com chave primária composta, como aqui). Por isso o
++ * SQLite não atualiza esse índice sozinho quando a entidade de origem muda em massa — é
++ * preciso reconstruí-lo com `INSERT INTO <tabela>(<tabela>) VALUES ('rebuild')`
++ * (https://www.sqlite.org/fts3.html#_external_content_fts4_tables_). É isso que
++ * `CatalogoDao` faz depois de cada inserção/remoção em massa.
++ *
++ * `TOKENIZER_UNICODE61` tokeniza em minúsculas e remove acentos por padrão
++ * (remove_diacritics=1), por isso a busca ignora acento e maiúscula sem configuração extra.
++ */
++@Fts4(contentEntity = Canal::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
++@Entity(tableName = "CanalFts")
++data class CanalFts(val nome: String)
++
++@Fts4(contentEntity = Filme::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
++@Entity(tableName = "FilmeFts")
++data class FilmeFts(val nome: String)
++
++@Fts4(contentEntity = Serie::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
++@Entity(tableName = "SerieFts")
++data class SerieFts(val nome: String)
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+new file mode 100644
+index 0000000..c26fcbf
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+@@ -0,0 +1,88 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import androidx.room.Room
++import kotlinx.coroutines.test.runTest
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++@RunWith(RobolectricTestRunner::class)
++class CatalogoDaoTest {
++
++    private lateinit var banco: BancoApp
++    private lateinit var dao: CatalogoDao
++
++    @Before
++    fun subirBanco() {
++        banco = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java)
++            .allowMainThreadQueries()
++            .build()
++        dao = banco.catalogoDao()
++    }
++
++    @After
++    fun fecharBanco() {
++        banco.close()
++    }
++
++    // streamId/seriesId identificam o item dentro de uma conta; contaId default = 1 porque
++    // a maioria dos testes só precisa de uma conta.
++    private fun canal(streamId: Long, nome: String, contaId: Long = 1): Canal =
++        Canal(contaId = contaId, streamId = streamId, nome = nome, categoriaId = null, icone = null, epgId = null, numero = null)
++
++    private fun filme(streamId: Long, nome: String, contaId: Long = 1): Filme =
++        Filme(
++            contaId = contaId, streamId = streamId, nome = nome, categoriaId = null, capa = null,
++            extensao = null, ano = null, nota = null, adicionadoEm = null,
++        )
++
++    private fun serie(seriesId: Long, nome: String, contaId: Long = 1): Serie =
++        Serie(
++            contaId = contaId, seriesId = seriesId, nome = nome, categoriaId = null, capa = null,
++            sinopse = null, ano = null, nota = null, modificadaEm = null,
++        )
++
++    @Test fun `busca ignora acento e maiusculas`() = runTest {
++        dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
++        assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(contaId = 1, termo = "sao paulo").map { it.nome })
++        assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "SÃO").map { it.nome })
++    }
++
++    @Test fun `busca por prefixo enquanto digita`() = runTest {
++        dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
++        assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "pau").map { it.nome })
++    }
++
++    @Test fun `contas nao se misturam`() = runTest {
++        dao.inserirCanais(listOf(canal(1, "Globo HD", contaId = 1), canal(1, "Globo HD", contaId = 2)))
++
++        assertEquals(listOf("Globo HD"), dao.buscarNomesCanais(1, "globo").map { it.nome })
++        assertEquals(1, dao.contagem(1).canais)
++        assertEquals(1, dao.contagem(2).canais)
++    }
++
++    @Test fun `apagarCatalogo limpa so a conta indicada`() = runTest {
++        dao.inserirCanais(listOf(canal(1, "Globo HD", contaId = 1), canal(1, "Globo HD", contaId = 2)))
++        dao.inserirFilmes(listOf(filme(1, "Filme A", contaId = 1)))
++        dao.inserirSeries(listOf(serie(1, "Serie A", contaId = 1)))
++
++        dao.apagarCatalogo(1)
++
++        assertEquals(Contagem(canais = 0, filmes = 0, series = 0, programas = 0), dao.contagem(1))
++        assertEquals(1, dao.contagem(2).canais)
++    }
++
++    @Test fun `contagem soma cada tipo`() = runTest {
++        dao.inserirCategorias(listOf(Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes")))
++        dao.inserirCanais(listOf(canal(1, "Globo HD"), canal(2, "SporTV HD")))
++        dao.inserirFilmes(listOf(filme(1, "Filme A")))
++        dao.inserirSeries(listOf(serie(1, "Serie A"), serie(2, "Serie B")))
++        dao.inserirProgramas(listOf(Programa(1, "epg1", 1000L, 2000L, "Jornal", null)))
++
++        assertEquals(Contagem(canais = 2, filmes = 1, series = 2, programas = 1), dao.contagem(1))
++    }
++}
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 39ce5c3..cbafe53 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -1,11 +1,12 @@
+ // Build raiz: só declara os plugins (versões centralizadas no catálogo), sem aplicá-los aqui.
+ // Cada módulo aplica o que precisa via alias(libs.plugins....).
+ //
+ // Sem plugin "kotlin-android": a partir do AGP 9.0 o suporte a Kotlin já vem embutido
+ // (built-in Kotlin); aplicar org.jetbrains.kotlin.android dá erro de build
+ // (https://kotl.in/gradle/agp-built-in-kotlin, verificado rodando o build real).
+ plugins {
+     alias(libs.plugins.android.application) apply false
+     alias(libs.plugins.kotlin.compose) apply false
+     alias(libs.plugins.kotlin.serialization) apply false
++    alias(libs.plugins.ksp) apply false
+ }
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 7758637..c67f6ff 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -1,15 +1,19 @@
+ [versions]
+ # Fonte: maven-metadata.xml de cada grupo em dl.google.com/repo1.maven.org, consultado em 2026-11-10
+ # (última versão estável disponível nessa data, sem alpha/beta/rc).
+ agp = "9.5.1"
+ kotlin = "2.4.21"
++# KSP não acompanha mais o número de versão do Kotlin (desde a 2.3.0, numeração própria);
++# 2.3.13 é a última estável em dl.google.com/com/google/devtools/ksp na mesma data do
++# catálogo (verificado em releases do GitHub google/ksp em 2026-11-10).
++ksp = "2.3.13"
+ composeBom = "2026.09.00"
+ coreKtx = "1.19.1"
+ activityCompose = "1.13.0"
+ lifecycleRuntimeKtx = "2.11.0"
+ room = "2.8.5"
+ workRuntime = "2.12.0"
+ okhttp = "5.5.1"
+ kotlinxSerializationJson = "1.12.0"
+ kotlinxCoroutinesTest = "1.11.0"
+ robolectric = "4.17"
+@@ -43,10 +47,11 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
+ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+ kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
+ junit = { group = "junit", name = "junit", version.ref = "junit" }
+ 
+ [plugins]
+ android-application = { id = "com.android.application", version.ref = "agp" }
+ # Sem alias para "org.jetbrains.kotlin.android": a partir do AGP 9.0 o Kotlin já vem
+ # embutido (built-in Kotlin) e aplicar esse plugin manualmente quebra o build.
+ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
++ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

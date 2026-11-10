@@ -51,7 +51,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `pendente` |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `pendente` |
-| 1 | T7 · Banco local (Room + FTS) | `pendente` |
+| 1 | T7 · Banco local (Room + FTS) | `testada` |
 | 1 | T8 · Leitor de XMLTV | `pendente` |
 | 1 | T9 · Carga do catálogo (orquestração) | `pendente` |
 | 1 | T10 · Contas: cofre de senha e repositório | `pendente` |
@@ -397,7 +397,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `app/schemas/`) com `fun catalogoDao()` e `fun contaDao()`. O `ContaDao` é preenchido na T10.
   Toda a troca de catálogo acontece dentro de `banco.withTransaction { }`, chamada pela T9.
 
-- [ ] **Passo 1: Escrever os testes que falham.**
+- [x] **Passo 1: Escrever os testes que falham.**
 
 ```kotlin
 @Test fun `busca ignora acento e maiusculas`() = runTest {
@@ -411,12 +411,12 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 @Test fun `contagem soma cada tipo`()
 ```
 
-- [ ] **Passo 2: Rodar e ver falhar.**
-- [ ] **Passo 3: Implementar.** Para o termo do FTS, separe por espaço, escape aspas e junte como
+- [x] **Passo 2: Rodar e ver falhar.**
+- [x] **Passo 3: Implementar.** Para o termo do FTS, separe por espaço, escape aspas e junte como
   `"palavra"*` com AND implícito, para a busca por prefixo funcionar. Ligue a tabela FTS à
   entidade por `rowid`. Ative `ksp` com `room.schemaLocation`.
-- [ ] **Passo 4: Rodar e ver passar.**
-- [ ] **Passo 5: Commit.** `feat: banco local com busca FTS sem acento`.
+- [x] **Passo 4: Rodar e ver passar.**
+- [x] **Passo 5: Commit.** `feat: banco local com busca FTS sem acento`.
 
 ### T8: Leitor de XMLTV
 

@@ -1,0 +1,150 @@
+# Review package: 6876c13..9862d02
+
+## Commits
+9862d02 fix: remove rebuild manual da FTS, Room ja sincroniza via triggers
+
+## Files changed
+ .../pagmovel/iptvplayer/dados/CatalogoDao.kt       | 45 ++++------------------
+ .../io/github/pagmovel/iptvplayer/dados/Fts.kt     | 10 ++---
+ 2 files changed, 12 insertions(+), 43 deletions(-)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+index fa9ac8e..8328499 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+@@ -3,92 +3,61 @@ package io.github.pagmovel.iptvplayer.dados
+ import androidx.room.Dao
+ import androidx.room.Insert
+ import androidx.room.Query
+ import androidx.room.Transaction
+ 
+ /** Contagem de itens do catálogo de uma conta, por tipo. */
+ data class Contagem(val canais: Int, val filmes: Int, val series: Int, val programas: Int)
+ 
+ /**
+  * Acesso ao catálogo (categorias, canais, filmes, séries e programação) e à busca textual
+- * por nome. Os métodos públicos de inserção em massa já deixam o índice FTS (ver `Fts.kt`)
+- * reconstruído ao final — quem chama não precisa saber que ele existe.
++ * por nome. Os índices FTS (ver `Fts.kt`) se mantêm sincronizados sozinhos: o Room gera
++ * triggers de sincronia (`room_fts_content_sync_...`, visíveis em
++ * `app/schemas/.../1.json`) que disparam a cada INSERT/UPDATE/DELETE nas tabelas de
++ * origem — este DAO não reconstrói índice nenhum manualmente.
+  */
+ @Dao
+ abstract class CatalogoDao {
+ 
+     @Insert
+     abstract suspend fun inserirCategorias(categorias: List<Categoria>)
+ 
+     @Insert
+-    protected abstract suspend fun inserirCanaisBruto(canais: List<Canal>)
+-
+-    @Query("INSERT INTO CanalFts(CanalFts) VALUES ('rebuild')")
+-    protected abstract suspend fun reconstruirIndiceCanais()
+-
+-    @Transaction
+-    open suspend fun inserirCanais(canais: List<Canal>) {
+-        inserirCanaisBruto(canais)
+-        reconstruirIndiceCanais()
+-    }
++    abstract suspend fun inserirCanais(canais: List<Canal>)
+ 
+     @Insert
+-    protected abstract suspend fun inserirFilmesBruto(filmes: List<Filme>)
+-
+-    @Query("INSERT INTO FilmeFts(FilmeFts) VALUES ('rebuild')")
+-    protected abstract suspend fun reconstruirIndiceFilmes()
+-
+-    @Transaction
+-    open suspend fun inserirFilmes(filmes: List<Filme>) {
+-        inserirFilmesBruto(filmes)
+-        reconstruirIndiceFilmes()
+-    }
++    abstract suspend fun inserirFilmes(filmes: List<Filme>)
+ 
+     @Insert
+-    protected abstract suspend fun inserirSeriesBruto(series: List<Serie>)
+-
+-    @Query("INSERT INTO SerieFts(SerieFts) VALUES ('rebuild')")
+-    protected abstract suspend fun reconstruirIndiceSeries()
+-
+-    @Transaction
+-    open suspend fun inserirSeries(series: List<Serie>) {
+-        inserirSeriesBruto(series)
+-        reconstruirIndiceSeries()
+-    }
++    abstract suspend fun inserirSeries(series: List<Serie>)
+ 
+     @Insert
+     abstract suspend fun inserirProgramas(programas: List<Programa>)
+ 
+     @Query("DELETE FROM Categoria WHERE contaId = :contaId")
+     protected abstract suspend fun apagarCategorias(contaId: Long)
+ 
+     @Query("DELETE FROM Canal WHERE contaId = :contaId")
+     protected abstract suspend fun apagarCanais(contaId: Long)
+ 
+     @Query("DELETE FROM Filme WHERE contaId = :contaId")
+     protected abstract suspend fun apagarFilmes(contaId: Long)
+ 
+     @Query("DELETE FROM Serie WHERE contaId = :contaId")
+     protected abstract suspend fun apagarSeries(contaId: Long)
+ 
+-    // ponytail: reconstrói o índice FTS inteiro (todas as contas) a cada chamada, porque a
+-    // troca de catálogo já é um recarregamento completo e pouco frequente; trocar por um
+-    // rebuild incremental só se isso aparecer como lento num catálogo real.
+     @Transaction
+     open suspend fun apagarCatalogo(contaId: Long) {
+         apagarCategorias(contaId)
+         apagarCanais(contaId)
+         apagarFilmes(contaId)
+         apagarSeries(contaId)
+-        reconstruirIndiceCanais()
+-        reconstruirIndiceFilmes()
+-        reconstruirIndiceSeries()
+     }
+ 
+     @Query("DELETE FROM Programa WHERE contaId = :contaId")
+     abstract suspend fun apagarProgramacao(contaId: Long)
+ 
+     @Query(
+         "SELECT " +
+             "(SELECT COUNT(*) FROM Canal WHERE contaId = :contaId) AS canais, " +
+             "(SELECT COUNT(*) FROM Filme WHERE contaId = :contaId) AS filmes, " +
+             "(SELECT COUNT(*) FROM Serie WHERE contaId = :contaId) AS series, " +
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt
+index 77fe7fc..c15b7ce 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Fts.kt
+@@ -2,25 +2,25 @@ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Entity
+ import androidx.room.Fts4
+ import androidx.room.FtsOptions
+ 
+ /**
+  * Índices de busca textual (FTS4) do nome de canais, filmes e séries.
+  *
+  * São "external content tables" do SQLite: a tabela FTS não guarda cópia do texto, só o
+  * índice, e lê o nome direto da entidade de origem (`contentEntity`) pelo rowid implícito
+- * que toda tabela SQLite tem (mesmo com chave primária composta, como aqui). Por isso o
+- * SQLite não atualiza esse índice sozinho quando a entidade de origem muda em massa — é
+- * preciso reconstruí-lo com `INSERT INTO <tabela>(<tabela>) VALUES ('rebuild')`
+- * (https://www.sqlite.org/fts3.html#_external_content_fts4_tables_). É isso que
+- * `CatalogoDao` faz depois de cada inserção/remoção em massa.
++ * que toda tabela SQLite tem (mesmo com chave primária composta, como aqui). O próprio Room
++ * mantém esse índice sincronizado: por usar `contentEntity`, ele gera triggers
++ * (`room_fts_content_sync_...`, visíveis em `app/schemas/.../1.json`) que disparam em todo
++ * INSERT/UPDATE/DELETE da entidade de origem — não é preciso (nem deve) reconstruir o
++ * índice manualmente em `CatalogoDao`.
+  *
+  * `TOKENIZER_UNICODE61` tokeniza em minúsculas e remove acentos por padrão
+  * (remove_diacritics=1), por isso a busca ignora acento e maiúscula sem configuração extra.
+  */
+ @Fts4(contentEntity = Canal::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
+ @Entity(tableName = "CanalFts")
+ data class CanalFts(val nome: String)
+ 
+ @Fts4(contentEntity = Filme::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
+ @Entity(tableName = "FilmeFts")
