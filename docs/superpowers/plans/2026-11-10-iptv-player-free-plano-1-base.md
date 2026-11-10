@@ -4,8 +4,9 @@
 > (recomendado) ou superpowers:executing-plans para executar este plano tarefa por tarefa. Os
 > passos usam checkbox (`- [ ]`).
 >
-> **NÃO EXECUTAR sem autorização do dono.** Em 2026-11-10 ele pediu: "não inicie o
-> desenvolvimento". Este plano está em revisão.
+> **Autorizado pelo dono em 2026-11-10** após revisão. Execução em andamento via
+> subagent-driven-development; ledger em
+> `.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md`.
 
 **Objetivo:** um APK assinado, publicado nas Releases do GitHub e atualizável por cima, que
 cadastra uma conta Xtream (inclusive colando o link do provedor), baixa canais, filmes, séries e
