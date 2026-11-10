@@ -6,3 +6,6 @@ temp/
 
 # Cache do hook do impeccable (a config de exceções é versionada)
 .impeccable/hook.cache.json
+
+# Configuração de IDE: preferência de máquina, não do projeto
+.vscode/
