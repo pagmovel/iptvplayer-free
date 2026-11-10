@@ -71,4 +71,17 @@ BASE antes da T1: `cdb3938`.
      de autorização) — implementador corretamente não tocou nem comitou.
 - Controlador: comitou a atualização do aviso do plano (`d4e633d`, já era minha edição) e vai
   versionar este workspace (`.superpowers/sdd/`) no próximo commit, conforme a regra do dono.
-- Task 1: gerando pacote de revisão (BASE `cdb3938`, HEAD `8a47817`) e despachando o revisor.
+- Task 1: pacote de revisão gerado (`review-cdb3938..8a47817.diff`), revisor despachado
+  (modelo sonnet).
+- Task 1: revisão: ✅ spec conforme, qualidade **Aprovado**, 0 crítico, 0 importante. ⚠️ itens
+  (versões/build real da imagem Docker, sintaxe do AGP, corpo do commit, ausência de
+  push/tag) verificados por mim diretamente: corpo do commit `8a47817` confirmado com
+  `Co-Authored-By: Claude Sonnet 5`; `git tag`/`git status -b` confirmam nenhum push nem tag;
+  as descobertas de build (AGP/compileSdk) já vieram de execução real relatada pelo
+  implementador. Nada ficou como lacuna real.
+- Task 1: minor (deferred): `ui/MainActivity.kt:36` usa string hardcoded em vez de
+  `stringResource(R.string.app_name)` (duplica `strings.xml:3`).
+- Task 1: minor (deferred): `scripts/gradle.ps1:11` roda o build inteiro com `--user root`
+  para contornar permissão do volume `iptv-gradle-cache`; um ajuste de dono do volume (fora
+  do script) seria mais contido. Risco baixo (container local efêmero).
+- Task 1: complete (commits cdb3938..8a47817, review clean, 2 minors deferred).

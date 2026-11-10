@@ -1,0 +1,783 @@
+# Review package: cdb3938..8a47817
+
+## Commits
+8a47817 build: esqueleto do app Android e build via Docker
+
+## Files changed
+ .gitignore                                         |  10 +
+ app/build.gradle.kts                               |  61 +++++
+ app/src/main/AndroidManifest.xml                   |  24 ++
+ .../github/pagmovel/iptvplayer/ui/MainActivity.kt  |  38 ++++
+ .../main/res/drawable/ic_launcher_foreground.xml   |  11 +
+ app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml |   5 +
+ app/src/main/res/values/colors.xml                 |   5 +
+ app/src/main/res/values/strings.xml                |   4 +
+ .../io/github/pagmovel/iptvplayer/EsqueletoTest.kt |  11 +
+ build.gradle.kts                                   |  11 +
+ gradle.properties                                  |   4 +
+ gradle/libs.versions.toml                          |  52 +++++
+ gradle/wrapper/gradle-wrapper.jar                  | Bin 0 -> 48749 bytes
+ gradle/wrapper/gradle-wrapper.properties           |   9 +
+ gradlew                                            | 248 +++++++++++++++++++++
+ gradlew.bat                                        | 112 ++++++++++
+ scripts/gradle.ps1                                 |  18 ++
+ settings.gradle.kts                                |  18 ++
+ 18 files changed, 641 insertions(+)
+
+## Diff
+diff --git a/.gitignore b/.gitignore
+index 068383c..51d8a7a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,10 +2,20 @@
+ listas.txt
+ 
+ # Arquivos temporários de trabalho (script de coleta e amostras do provedor)
+ temp/
+ 
+ # Cache do hook do impeccable (a config de exceções é versionada)
+ .impeccable/hook.cache.json
+ 
+ # Configuração de IDE: preferência de máquina, não do projeto
+ .vscode/
++
++# Build Android/Gradle: gerado, não versionado (o wrapper em gradle/wrapper/ fica fora disso)
++build/
++.gradle/
++local.properties
++*.apk
++*.aab
++.cxx/
++captures/
++.idea/
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+new file mode 100644
+index 0000000..fc035a5
+--- /dev/null
++++ b/app/build.gradle.kts
+@@ -0,0 +1,61 @@
++plugins {
++    alias(libs.plugins.android.application)
++    alias(libs.plugins.kotlin.compose)
++    alias(libs.plugins.kotlin.serialization)
++}
++
++android {
++    namespace = "io.github.pagmovel.iptvplayer"
++
++    // 37.2 é a plataforma estável mais recente disponível na imagem cimg/android:2026.10
++    // (confirmado em .superpowers/sdd/.../task-1-report.md: source.properties de android-37.2
++    // tem PreviewSdkInt=0 e CodeName vazio, ou seja, não é preview).
++    compileSdk {
++        version = release(37) {
++            minorApiLevel = 2
++        }
++    }
++
++    defaultConfig {
++        applicationId = "io.github.pagmovel.iptvplayer"
++        minSdk = 26
++        targetSdk = 37
++        versionCode = 1
++        versionName = "0.1"
++    }
++
++    buildFeatures {
++        compose = true
++        buildConfig = true
++    }
++
++    buildTypes {
++        release {
++            isMinifyEnabled = false
++        }
++    }
++
++    // Built-in Kotlin (AGP 9+) deriva o jvmTarget do Kotlin a partir daqui; não existe mais
++    // o bloco "kotlinOptions" do plugin org.jetbrains.kotlin.android (verificado rodando
++    // o build real: "Unresolved reference 'kotlinOptions'").
++    compileOptions {
++        sourceCompatibility = JavaVersion.VERSION_17
++        targetCompatibility = JavaVersion.VERSION_17
++    }
++}
++
++dependencies {
++    implementation(libs.androidx.core.ktx)
++    implementation(libs.androidx.activity.compose)
++    implementation(libs.androidx.lifecycle.runtime.ktx)
++
++    implementation(platform(libs.androidx.compose.bom))
++    implementation(libs.androidx.compose.ui)
++    implementation(libs.androidx.compose.ui.graphics)
++    implementation(libs.androidx.compose.ui.tooling.preview)
++    implementation(libs.androidx.compose.material3)
++    debugImplementation(libs.androidx.compose.ui.tooling)
++    debugImplementation(libs.androidx.compose.ui.test.manifest)
++
++    testImplementation(libs.junit)
++}
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+new file mode 100644
+index 0000000..0815433
+--- /dev/null
++++ b/app/src/main/AndroidManifest.xml
+@@ -0,0 +1,24 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
++
++    <!-- O provedor de IPTV só serve conteúdo por http (sem TLS); ver próximas tarefas. -->
++    <uses-permission android:name="android.permission.INTERNET" />
++
++    <application
++        android:allowBackup="true"
++        android:icon="@mipmap/ic_launcher"
++        android:label="@string/app_name"
++        android:theme="@android:style/Theme.Material.NoActionBar"
++        android:usesCleartextTraffic="true">
++
++        <activity
++            android:name=".ui.MainActivity"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.LAUNCHER" />
++            </intent-filter>
++        </activity>
++    </application>
++
++</manifest>
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt
+new file mode 100644
+index 0000000..04298c5
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt
+@@ -0,0 +1,38 @@
++package io.github.pagmovel.iptvplayer.ui
++
++import android.os.Bundle
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Surface
++import androidx.compose.material3.Text
++import androidx.compose.material3.darkColorScheme
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++
++/**
++ * Esqueleto do app: só mostra o nome em tema escuro. As próximas tarefas adicionam o login
++ * Xtream e a navegação entre telas.
++ */
++class MainActivity : ComponentActivity() {
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        setContent {
++            MaterialTheme(colorScheme = darkColorScheme()) {
++                Surface(modifier = Modifier.fillMaxSize()) {
++                    TelaEsqueleto()
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun TelaEsqueleto() {
++    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++        Text(text = "IPTV Player Free")
++    }
++}
+diff --git a/app/src/main/res/drawable/ic_launcher_foreground.xml b/app/src/main/res/drawable/ic_launcher_foreground.xml
+new file mode 100644
+index 0000000..af876b5
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_launcher_foreground.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Triângulo de "play", simples e genérico (sem lembrar o ícone de nenhum app existente). -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp"
++    android:height="108dp"
++    android:viewportWidth="108"
++    android:viewportHeight="108">
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M40,34 L76,54 L40,74 Z" />
++</vector>
+diff --git a/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml b/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+new file mode 100644
+index 0000000..a8a8fa5
+--- /dev/null
++++ b/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
++    <background android:drawable="@color/ic_launcher_background" />
++    <foreground android:drawable="@drawable/ic_launcher_foreground" />
++</adaptive-icon>
+diff --git a/app/src/main/res/values/colors.xml b/app/src/main/res/values/colors.xml
+new file mode 100644
+index 0000000..76a2b71
+--- /dev/null
++++ b/app/src/main/res/values/colors.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- Ícone adaptativo: fundo escuro sólido, combinando com o tema escuro do app. -->
++    <color name="ic_launcher_background">#121212</color>
++</resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+new file mode 100644
+index 0000000..e5944e4
+--- /dev/null
++++ b/app/src/main/res/values/strings.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="app_name">IPTV Player Free</string>
++</resources>
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/EsqueletoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/EsqueletoTest.kt
+new file mode 100644
+index 0000000..99e2f0e
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/EsqueletoTest.kt
+@@ -0,0 +1,11 @@
++package io.github.pagmovel.iptvplayer
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class EsqueletoTest {
++    @Test
++    fun `nome do app e pacote estao corretos`() {
++        assertEquals("io.github.pagmovel.iptvplayer", BuildConfig.APPLICATION_ID)
++    }
++}
+diff --git a/build.gradle.kts b/build.gradle.kts
+new file mode 100644
+index 0000000..39ce5c3
+--- /dev/null
++++ b/build.gradle.kts
+@@ -0,0 +1,11 @@
++// Build raiz: só declara os plugins (versões centralizadas no catálogo), sem aplicá-los aqui.
++// Cada módulo aplica o que precisa via alias(libs.plugins....).
++//
++// Sem plugin "kotlin-android": a partir do AGP 9.0 o suporte a Kotlin já vem embutido
++// (built-in Kotlin); aplicar org.jetbrains.kotlin.android dá erro de build
++// (https://kotl.in/gradle/agp-built-in-kotlin, verificado rodando o build real).
++plugins {
++    alias(libs.plugins.android.application) apply false
++    alias(libs.plugins.kotlin.compose) apply false
++    alias(libs.plugins.kotlin.serialization) apply false
++}
+diff --git a/gradle.properties b/gradle.properties
+new file mode 100644
+index 0000000..f90a875
+--- /dev/null
++++ b/gradle.properties
+@@ -0,0 +1,4 @@
++org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
++org.gradle.parallel=true
++android.useAndroidX=true
++kotlin.code.style=official
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+new file mode 100644
+index 0000000..7758637
+--- /dev/null
++++ b/gradle/libs.versions.toml
+@@ -0,0 +1,52 @@
++[versions]
++# Fonte: maven-metadata.xml de cada grupo em dl.google.com/repo1.maven.org, consultado em 2026-11-10
++# (última versão estável disponível nessa data, sem alpha/beta/rc).
++agp = "9.5.1"
++kotlin = "2.4.21"
++composeBom = "2026.09.00"
++coreKtx = "1.19.1"
++activityCompose = "1.13.0"
++lifecycleRuntimeKtx = "2.11.0"
++room = "2.8.5"
++workRuntime = "2.12.0"
++okhttp = "5.5.1"
++kotlinxSerializationJson = "1.12.0"
++kotlinxCoroutinesTest = "1.11.0"
++robolectric = "4.17"
++kxml2 = "2.2.2"
++junit = "4.13.2"
++
++[libraries]
++androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
++androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
++androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
++
++# BOM do Compose: alinha as versões de todas as libs androidx.compose.* abaixo.
++androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
++androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
++androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
++androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
++androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
++androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
++androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
++
++# Usadas só a partir das próximas tarefas (persistência, download em segundo plano, rede e
++# parsing); declaradas já aqui para as próximas tarefas não precisarem mexer em versões.
++androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
++androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
++androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
++androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
++okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
++okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
++kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
++kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
++robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
++kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
++junit = { group = "junit", name = "junit", version.ref = "junit" }
++
++[plugins]
++android-application = { id = "com.android.application", version.ref = "agp" }
++# Sem alias para "org.jetbrains.kotlin.android": a partir do AGP 9.0 o Kotlin já vem
++# embutido (built-in Kotlin) e aplicar esse plugin manualmente quebra o build.
++kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
++kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+diff --git a/gradle/wrapper/gradle-wrapper.jar b/gradle/wrapper/gradle-wrapper.jar
+new file mode 100644
+index 0000000..9fa7f28
+Binary files /dev/null and b/gradle/wrapper/gradle-wrapper.jar differ
+diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
+new file mode 100644
+index 0000000..94c356a
+--- /dev/null
++++ b/gradle/wrapper/gradle-wrapper.properties
+@@ -0,0 +1,9 @@
++distributionBase=GRADLE_USER_HOME
++distributionPath=wrapper/dists
++distributionUrl=https\://services.gradle.org/distributions/gradle-9.9.0-bin.zip
++networkTimeout=10000
++retries=0
++retryBackOffMs=500
++validateDistributionUrl=true
++zipStoreBase=GRADLE_USER_HOME
++zipStorePath=wrapper/dists
+diff --git a/gradlew b/gradlew
+new file mode 100755
+index 0000000..249efbb
+--- /dev/null
++++ b/gradlew
+@@ -0,0 +1,248 @@
++#!/bin/sh
++
++#
++# Copyright © 2015 the original authors.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++# SPDX-License-Identifier: Apache-2.0
++#
++
++##############################################################################
++#
++#   gradlew start up script for POSIX generated by Gradle.
++#
++#   Important for running:
++#
++#   (1) You need a POSIX-compliant shell to run this script. If your /bin/sh is
++#       noncompliant, but you have some other compliant shell such as ksh or
++#       bash, then to run this script, type that shell name before the whole
++#       command line, like:
++#
++#           ksh gradlew
++#
++#       Busybox and similar reduced shells will NOT work, because this script
++#       requires all of these POSIX shell features:
++#         * functions;
++#         * expansions «$var», «${var}», «${var:-default}», «${var+SET}»,
++#           «${var#prefix}», «${var%suffix}», and «$( cmd )»;
++#         * compound commands having a testable exit status, especially «case»;
++#         * various built-in commands including «command», «set», and «ulimit».
++#
++#   Important for patching:
++#
++#   (2) This script targets any POSIX shell, so it avoids extensions provided
++#       by Bash, Ksh, etc; in particular arrays are avoided.
++#
++#       The "traditional" practice of packing multiple parameters into a
++#       space-separated string is a well documented source of bugs and security
++#       problems, so this is (mostly) avoided, by progressively accumulating
++#       options in "$@", and eventually passing that to Java.
++#
++#       Where the inherited environment variables (DEFAULT_JVM_OPTS, JAVA_OPTS,
++#       and GRADLE_OPTS) rely on word-splitting, this is performed explicitly;
++#       see the in-line comments for details.
++#
++#       There are tweaks for specific operating systems such as AIX, CygWin,
++#       Darwin, MinGW, and NonStop.
++#
++#   (3) This script is generated from the Groovy template
++#       https://github.com/gradle/gradle/blob/3d91ce3b8caaf77ad09f381f43615b715b53f72c/platforms/jvm/plugins-application/src/main/resources/org/gradle/api/internal/plugins/unixStartScript.txt
++#       within the Gradle project.
++#
++#       You can find Gradle at https://github.com/gradle/gradle/.
++#
++##############################################################################
++
++# Attempt to set APP_HOME
++
++# Resolve links: $0 may be a link
++app_path=$0
++
++# Need this for daisy-chained symlinks.
++while
++    APP_HOME=${app_path%"${app_path##*/}"}  # leaves a trailing /; empty if no leading path
++    [ -h "$app_path" ]
++do
++    ls=$( ls -ld "$app_path" )
++    link=${ls#*' -> '}
++    case $link in             #(
++      /*)   app_path=$link ;; #(
++      *)    app_path=$APP_HOME$link ;;
++    esac
++done
++
++# This is normally unused
++# shellcheck disable=SC2034
++APP_BASE_NAME=${0##*/}
++# Discard cd standard output in case $CDPATH is set (https://github.com/gradle/gradle/issues/25036)
++APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf '%s\n' "$PWD" ) || exit
++
++# Use the maximum available, or set MAX_FD != -1 to use that value.
++MAX_FD=maximum
++
++warn () {
++    echo "$*"
++} >&2
++
++die () {
++    echo
++    echo "$*"
++    echo
++    exit 1
++} >&2
++
++# OS specific support (must be 'true' or 'false').
++cygwin=false
++msys=false
++darwin=false
++nonstop=false
++case "$( uname )" in                #(
++  CYGWIN* )         cygwin=true  ;; #(
++  Darwin* )         darwin=true  ;; #(
++  MSYS* | MINGW* )  msys=true    ;; #(
++  NONSTOP* )        nonstop=true ;;
++esac
++
++
++
++# Determine the Java command to use to start the JVM.
++if [ -n "$JAVA_HOME" ] ; then
++    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
++        # IBM's JDK on AIX uses strange locations for the executables
++        JAVACMD=$JAVA_HOME/jre/sh/java
++    else
++        JAVACMD=$JAVA_HOME/bin/java
++    fi
++    if [ ! -x "$JAVACMD" ] ; then
++        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
++
++Please set the JAVA_HOME variable in your environment to match the
++location of your Java installation."
++    fi
++else
++    JAVACMD=java
++    if ! command -v java >/dev/null 2>&1
++    then
++        die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
++
++Please set the JAVA_HOME variable in your environment to match the
++location of your Java installation."
++    fi
++fi
++
++# Increase the maximum file descriptors if we can.
++if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
++    case $MAX_FD in #(
++      max*)
++        # In POSIX sh, ulimit -H is undefined. That's why the result is checked to see if it worked.
++        # shellcheck disable=SC2039,SC3045
++        MAX_FD=$( ulimit -H -n ) ||
++            warn "Could not query maximum file descriptor limit"
++    esac
++    case $MAX_FD in  #(
++      '' | soft) :;; #(
++      *)
++        # In POSIX sh, ulimit -n is undefined. That's why the result is checked to see if it worked.
++        # shellcheck disable=SC2039,SC3045
++        ulimit -n "$MAX_FD" ||
++            warn "Could not set maximum file descriptor limit to $MAX_FD"
++    esac
++fi
++
++# Collect all arguments for the java command, stacking in reverse order:
++#   * args from the command line
++#   * the main class name
++#   * -classpath
++#   * -D...appname settings
++#   * --module-path (only if needed)
++#   * DEFAULT_JVM_OPTS, JAVA_OPTS, and GRADLE_OPTS environment variables.
++
++# For Cygwin or MSYS, switch paths to Windows format before running java
++if "$cygwin" || "$msys" ; then
++    APP_HOME=$( cygpath --path --mixed "$APP_HOME" )
++
++    JAVACMD=$( cygpath --unix "$JAVACMD" )
++
++    # Now convert the arguments - kludge to limit ourselves to /bin/sh
++    for arg do
++        if
++            case $arg in                                #(
++              -*)   false ;;                            # don't mess with options #(
++              /?*)  t=${arg#/} t=/${t%%/*}              # looks like a POSIX filepath
++                    [ -e "$t" ] ;;                      #(
++              *)    false ;;
++            esac
++        then
++            arg=$( cygpath --path --ignore --mixed "$arg" )
++        fi
++        # Roll the args list around exactly as many times as the number of
++        # args, so each arg winds up back in the position where it started, but
++        # possibly modified.
++        #
++        # NB: a `for` loop captures its iteration list before it begins, so
++        # changing the positional parameters here affects neither the number of
++        # iterations, nor the values presented in `arg`.
++        shift                   # remove old arg
++        set -- "$@" "$arg"      # push replacement arg
++    done
++fi
++
++
++# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
++DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
++
++# Collect all arguments for the java command:
++#   * DEFAULT_JVM_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,
++#     and any embedded shellness will be escaped.
++#   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
++#     treated as '${Hostname}' itself on the command line.
++
++set -- \
++        "-Dorg.gradle.appname=$APP_BASE_NAME" \
++        -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
++        "$@"
++
++# Stop when "xargs" is not available.
++if ! command -v xargs >/dev/null 2>&1
++then
++    die "xargs is not available"
++fi
++
++# Use "xargs" to parse quoted args.
++#
++# With -n1 it outputs one arg per line, with the quotes and backslashes removed.
++#
++# In Bash we could simply go:
++#
++#   readarray ARGS < <( xargs -n1 <<<"$var" ) &&
++#   set -- "${ARGS[@]}" "$@"
++#
++# but POSIX shell has neither arrays nor command substitution, so instead we
++# post-process each arg (as a line of input to sed) to backslash-escape any
++# character that might be a shell metacharacter, then use eval to reverse
++# that process (while maintaining the separation between arguments), and wrap
++# the whole thing up as a single "set" statement.
++#
++# This will of course break if any of these variables contains a newline or
++# an unmatched quote.
++#
++
++eval "set -- $(
++        printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
++        xargs -n1 |
++        sed ' s~[^-[:alnum:]+,./:=@_]~\\&~g; ' |
++        tr '\n' ' '
++    )" '"$@"'
++
++exec "$JAVACMD" "$@"
+diff --git a/gradlew.bat b/gradlew.bat
+new file mode 100644
+index 0000000..3185a43
+--- /dev/null
++++ b/gradlew.bat
+@@ -0,0 +1,112 @@
++@rem
++@rem Copyright 2015 the original author or authors.
++@rem
++@rem Licensed under the Apache License, Version 2.0 (the "License");
++@rem you may not use this file except in compliance with the License.
++@rem You may obtain a copy of the License at
++@rem
++@rem      https://www.apache.org/licenses/LICENSE-2.0
++@rem
++@rem Unless required by applicable law or agreed to in writing, software
++@rem distributed under the License is distributed on an "AS IS" BASIS,
++@rem WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++@rem See the License for the specific language governing permissions and
++@rem limitations under the License.
++@rem
++@rem SPDX-License-Identifier: Apache-2.0
++@rem
++
++@if "%DEBUG%"=="" @echo off
++@rem ##########################################################################
++@rem
++@rem  gradlew startup script for Windows
++@rem
++@rem ##########################################################################
++
++@rem Set local scope for the variables, and ensure extensions are enabled
++setlocal EnableExtensions
++
++@rem Catch executions from older scripts and ensure they exit cleanly.
++@rem This can be removed once we can be reasonably confident that few people
++@rem will be migrating directly to this new wrapper.
++goto afterSafetyNet
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
++goto exitWithErrorLevel
++:afterSafetyNet
++
++set DIRNAME=%~dp0
++if "%DIRNAME%"=="" set DIRNAME=.
++@rem This is normally unused
++set APP_BASE_NAME=%~n0
++set APP_HOME=%DIRNAME%
++
++@rem Resolve any "." and ".." in APP_HOME to make it shorter.
++for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
++
++@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
++set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
++
++@rem Find java.exe
++if defined JAVA_HOME goto findJavaFromJavaHome
++
++set JAVA_EXE=java.exe
++%JAVA_EXE% -version >NUL 2>&1
++if %ERRORLEVEL% equ 0 goto execute
++
++1>&2 echo.
++1>&2 echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
++1>&2 echo.
++1>&2 echo Please set the JAVA_HOME variable in your environment to match the
++1>&2 echo location of your Java installation.
++
++"%COMSPEC%" /c exit 1
++goto exitWithErrorLevel
++
++:findJavaFromJavaHome
++set JAVA_HOME=%JAVA_HOME:"=%
++set JAVA_EXE=%JAVA_HOME%/bin/java.exe
++
++if exist "%JAVA_EXE%" goto execute
++
++1>&2 echo.
++1>&2 echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME%
++1>&2 echo.
++1>&2 echo Please set the JAVA_HOME variable in your environment to match the
++1>&2 echo location of your Java installation.
++
++"%COMSPEC%" /c exit 1
++goto exitWithErrorLevel
++
++:execute
++@rem Setup the command line
++
++
++
++@rem Execute gradlew
++@rem endlocal doesn't take effect until after the line is parsed and variables are expanded
++@rem which allows us to clear the local environment before executing the java command
++endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %* & call :exitWithErrorLevel & goto exitWithErrorLevel
++
++@rem This label must not be changed. We rely on old scripts being able to jump to this point.
++:exitWithErrorLevel
++@rem Use "%COMSPEC%" /c exit to allow operators to work properly in scripts
++"%COMSPEC%" /c exit %ERRORLEVEL%
+diff --git a/scripts/gradle.ps1 b/scripts/gradle.ps1
+new file mode 100644
+index 0000000..9319d88
+--- /dev/null
++++ b/scripts/gradle.ps1
+@@ -0,0 +1,18 @@
++# Roda o Gradle do projeto dentro do container cimg/android:2026.10, porque esta máquina
++# Windows não tem SDK Android nem Kotlin instalados. Usado por todas as tarefas para verificar.
++#
++# Uso: .\scripts\gradle.ps1 <tarefas...>
++# Ex.:  .\scripts\gradle.ps1 testDebugUnitTest assembleDebug
++
++# --user root: o volume nomeado do cache é criado com dono root pelo Docker; o usuário
++# padrão da imagem (circleci) não tem permissão de escrita nele até alguém ajustar o dono
++# manualmente. Rodar como root evita esse passo de setup em qualquer máquina nova.
++docker run --rm `
++    --user root `
++    -v "${PWD}:/projeto" `
++    -v iptv-gradle-cache:/home/circleci/.gradle `
++    -w /projeto `
++    cimg/android:2026.10 `
++    bash -lc "chmod +x ./gradlew; ./gradlew $($args -join ' ') --no-daemon"
++
++exit $LASTEXITCODE
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+new file mode 100644
+index 0000000..3bd297b
+--- /dev/null
++++ b/settings.gradle.kts
+@@ -0,0 +1,18 @@
++pluginManagement {
++    repositories {
++        google()
++        mavenCentral()
++        gradlePluginPortal()
++    }
++}
++
++dependencyResolutionManagement {
++    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
++    repositories {
++        google()
++        mavenCentral()
++    }
++}
++
++rootProject.name = "iptv-player-free"
++include(":app")
