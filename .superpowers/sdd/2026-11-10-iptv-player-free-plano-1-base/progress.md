@@ -134,3 +134,8 @@ BASE antes da T7: `6c1a8b9`.
 - Task 7: re-revisão — todos os 3 achados ADDRESSED, nenhuma quebra nova. Fix round 1/5
   fechou o loop.
 - Task 7: complete (commits 6c1a8b9..9862d02, fix round 1/5, review clean).
+
+BASE antes da T6: `6334d39`.
+
+- Task 6: despachado (implementador, modelo sonnet). Brief: `task-6-brief.md`. Relatório
+  esperado em `task-6-report.md`. Aviso dado sobre a reordenação (T6 antes de T5, depois T7).
