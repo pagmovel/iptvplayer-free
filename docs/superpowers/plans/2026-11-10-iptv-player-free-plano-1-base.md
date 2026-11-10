@@ -48,7 +48,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
 | 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `pendente` |
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
-| 1 | T4 · Leitura do link do provedor | `pendente` |
+| 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `pendente` |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `pendente` |
 | 1 | T7 · Banco local (Room + FTS) | `pendente` |
@@ -242,7 +242,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `servidor` = esquema + host + porta (se houver), sem barra final, ex. `http://exemplo.tv:80`.
 - Produz: `fun lerLinkXtream(texto: String): CredenciaisXtream?`
 
-- [ ] **Passo 1: Escrever os testes que falham.**
+- [x] **Passo 1: Escrever os testes que falham.**
 
 ```kotlin
 @Test fun `extrai do link no formato que o provedor manda`() {
@@ -263,12 +263,12 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 }
 ```
 
-- [ ] **Passo 2: Rodar e ver falhar** (`--tests '*LinkXtreamTest'`).
-- [ ] **Passo 3: Implementar `lerLinkXtream`.** Ache o primeiro `https?://\S+` no texto e
+- [x] **Passo 2: Rodar e ver falhar** (`--tests '*LinkXtreamTest'`).
+- [x] **Passo 3: Implementar `lerLinkXtream`.** Ache o primeiro `https?://\S+` no texto e
   interprete-o com `java.net.URI`. Decodifique os parâmetros com `URLDecoder` em UTF-8. Não use
   `android.net.Uri`, que não funciona em teste na JVM sem Robolectric.
-- [ ] **Passo 4: Rodar e ver passar.**
-- [ ] **Passo 5: Commit.** `feat: leitura de credenciais a partir do link do provedor`.
+- [x] **Passo 4: Rodar e ver passar.**
+- [x] **Passo 5: Commit.** `feat: leitura de credenciais a partir do link do provedor`.
 
 ### T5: Cliente da API Xtream
 

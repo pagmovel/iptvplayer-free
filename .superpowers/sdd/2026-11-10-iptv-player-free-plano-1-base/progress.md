@@ -85,3 +85,21 @@ BASE antes da T1: `cdb3938`.
   para contornar permissão do volume `iptv-gradle-cache`; um ajuste de dono do volume (fora
   do script) seria mais contido. Risco baixo (container local efêmero).
 - Task 1: complete (commits cdb3938..8a47817, review clean, 2 minors deferred).
+
+BASE antes da T4: `5dd7d0b`.
+
+- Task 4: implementado (commit `0fe2a79`, modelo haiku). 4/4 testes passando. Relatório:
+  `task-4-report.md`.
+- Task 4: minor (deferred): o commit terminou com `Co-Authored-By: Claude Haiku 4.5
+  <noreply@anthropic.com>` em vez de `Claude Sonnet 5`, apesar da instrução explícita no
+  dispatch (não é só o texto desatualizado do plano — o controlador já tinha corrigido isso
+  na instrução). Não vou reescrever o commit (a regra do dono é nunca dar `--amend` sem pedido
+  explícito, e nada foi publicado ainda, então o risco de deixar como está é zero). Vou
+  reforçar a instrução nos próximos dispatches e registrar isto para a revisão final decidir
+  se corrige em lote.
+- Task 4: pacote de revisão gerado (`review-5dd7d0b..0fe2a79.diff`), revisor despachado
+  (modelo haiku).
+- Task 4: revisão: ✅ spec conforme, qualidade **Aprovado**, 0 crítico, 0 importante. Nota
+  técnica (não é defeito): usou `java.net.URL` em vez de `java.net.URI` como o brief sugeria —
+  decisão válida, sem impacto.
+- Task 4: complete (commits 5dd7d0b..0fe2a79, review clean).
