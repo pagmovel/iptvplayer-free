@@ -10,8 +10,10 @@ data class Contagem(val canais: Int, val filmes: Int, val series: Int, val progr
 
 /**
  * Acesso ao catálogo (categorias, canais, filmes, séries e programação) e à busca textual
- * por nome. Os métodos públicos de inserção em massa já deixam o índice FTS (ver `Fts.kt`)
- * reconstruído ao final — quem chama não precisa saber que ele existe.
+ * por nome. Os índices FTS (ver `Fts.kt`) se mantêm sincronizados sozinhos: o Room gera
+ * triggers de sincronia (`room_fts_content_sync_...`, visíveis em
+ * `app/schemas/.../1.json`) que disparam a cada INSERT/UPDATE/DELETE nas tabelas de
+ * origem — este DAO não reconstrói índice nenhum manualmente.
  */
 @Dao
 abstract class CatalogoDao {
@@ -20,40 +22,13 @@ abstract class CatalogoDao {
     abstract suspend fun inserirCategorias(categorias: List<Categoria>)
 
     @Insert
-    protected abstract suspend fun inserirCanaisBruto(canais: List<Canal>)
-
-    @Query("INSERT INTO CanalFts(CanalFts) VALUES ('rebuild')")
-    protected abstract suspend fun reconstruirIndiceCanais()
-
-    @Transaction
-    open suspend fun inserirCanais(canais: List<Canal>) {
-        inserirCanaisBruto(canais)
-        reconstruirIndiceCanais()
-    }
+    abstract suspend fun inserirCanais(canais: List<Canal>)
 
     @Insert
-    protected abstract suspend fun inserirFilmesBruto(filmes: List<Filme>)
-
-    @Query("INSERT INTO FilmeFts(FilmeFts) VALUES ('rebuild')")
-    protected abstract suspend fun reconstruirIndiceFilmes()
-
-    @Transaction
-    open suspend fun inserirFilmes(filmes: List<Filme>) {
-        inserirFilmesBruto(filmes)
-        reconstruirIndiceFilmes()
-    }
+    abstract suspend fun inserirFilmes(filmes: List<Filme>)
 
     @Insert
-    protected abstract suspend fun inserirSeriesBruto(series: List<Serie>)
-
-    @Query("INSERT INTO SerieFts(SerieFts) VALUES ('rebuild')")
-    protected abstract suspend fun reconstruirIndiceSeries()
-
-    @Transaction
-    open suspend fun inserirSeries(series: List<Serie>) {
-        inserirSeriesBruto(series)
-        reconstruirIndiceSeries()
-    }
+    abstract suspend fun inserirSeries(series: List<Serie>)
 
     @Insert
     abstract suspend fun inserirProgramas(programas: List<Programa>)
@@ -70,18 +45,12 @@ abstract class CatalogoDao {
     @Query("DELETE FROM Serie WHERE contaId = :contaId")
     protected abstract suspend fun apagarSeries(contaId: Long)
 
-    // ponytail: reconstrói o índice FTS inteiro (todas as contas) a cada chamada, porque a
-    // troca de catálogo já é um recarregamento completo e pouco frequente; trocar por um
-    // rebuild incremental só se isso aparecer como lento num catálogo real.
     @Transaction
     open suspend fun apagarCatalogo(contaId: Long) {
         apagarCategorias(contaId)
         apagarCanais(contaId)
         apagarFilmes(contaId)
         apagarSeries(contaId)
-        reconstruirIndiceCanais()
-        reconstruirIndiceFilmes()
-        reconstruirIndiceSeries()
     }
 
     @Query("DELETE FROM Programa WHERE contaId = :contaId")
