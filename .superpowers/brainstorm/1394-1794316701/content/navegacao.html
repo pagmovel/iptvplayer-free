@@ -1,0 +1,96 @@
+<h2>Como você quer navegar pelo app?</h2>
+<p class="subtitle">Três jeitos de organizar a tela inicial no celular. Clique no que parecer melhor, ou me diga o que misturaria.</p>
+
+<style>
+  .phone{width:220px;height:440px;margin:0 auto;border:3px solid #444;border-radius:26px;background:#0f1115;color:#e8e8e8;overflow:hidden;display:flex;flex-direction:column;font-size:11px;font-family:system-ui,sans-serif}
+  .ph-top{padding:10px 12px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .ph-body{flex:1;overflow:hidden;padding:0 10px}
+  .ph-tabs{display:flex;justify-content:space-around;border-top:1px solid #2a2d35;padding:8px 0;font-size:9px;color:#b8c0c8}
+  .ph-tabs .on{color:#4fc3f7;font-weight:700}
+  .srch{background:#1d2027;border-radius:8px;padding:7px 9px;color:#a8adb8;margin-bottom:8px}
+  .chips{display:flex;gap:5px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden}
+  .chip{background:#1d2027;border-radius:12px;padding:3px 8px;white-space:nowrap;color:#bbb}
+  .chip.on{background:#4fc3f7;color:#000}
+  .ch{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #1d2027}
+  .logo{width:26px;height:26px;border-radius:6px;background:#2a2f3a;flex:none}
+  .ch small{display:block;color:#a8adb8;font-size:9px}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .tile{border-radius:12px;height:92px;display:flex;align-items:flex-end;padding:8px;font-weight:700;font-size:12px}
+  .t1{background:linear-gradient(135deg,#1e88e5,#1565c0)}.t2{background:linear-gradient(135deg,#e53935,#b71c1c)}
+  .t3{background:linear-gradient(135deg,#8e24aa,#5e35b1)}.t4{background:linear-gradient(135deg,#43a047,#2e7d32)}
+  .wide{grid-column:span 2;height:46px;background:#1d2027;align-items:center;font-weight:500}
+  .row-t{font-weight:600;margin:8px 0 5px}
+  .row{display:flex;gap:6px;overflow:hidden}
+  .poster{width:56px;height:80px;border-radius:6px;background:#2a2f3a;flex:none}
+  .poster.w{width:96px;height:56px}
+  .hero{height:110px;border-radius:10px;background:linear-gradient(180deg,#37474f,#111);display:flex;align-items:flex-end;padding:8px;font-weight:700;margin-bottom:4px}
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="abas" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="ph-top"><span>TV ao vivo</span><span>⋮</span></div>
+        <div class="ph-body">
+          <div class="srch">🔍 Buscar canal…</div>
+          <div class="chips"><span class="chip on">Todos</span><span class="chip">Esportes</span><span class="chip">Filmes</span><span class="chip">Notícias</span></div>
+          <div class="ch"><div class="logo"></div><div>Canal 1<small>Agora: Jornal da manhã</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 2<small>Agora: Futebol ao vivo</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 3<small>Agora: Filme da tarde</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 4<small>Agora: Desenhos</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 5<small>Agora: Documentário</small></div></div>
+        </div>
+        <div class="ph-tabs"><span class="on">📺<br>Ao vivo</span><span>🎬<br>Filmes</span><span>📼<br>Séries</span><span>⭐<br>Favoritos</span><span>🔍<br>Busca</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Abas embaixo</h3>
+      <p>Abre direto na TV ao vivo. Troca de seção com um toque, como a maioria dos apps de celular. Menos telas no caminho.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="blocos" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="ph-top"><span>Meu Player</span><span>⚙</span></div>
+        <div class="ph-body">
+          <div class="srch">🔍 Buscar em tudo…</div>
+          <div class="tiles">
+            <div class="tile t1">📺 Ao vivo</div>
+            <div class="tile t2">🎬 Filmes</div>
+            <div class="tile t3">📼 Séries</div>
+            <div class="tile t4">📅 Guia</div>
+            <div class="tile wide">⭐ Favoritos</div>
+            <div class="tile wide">↻ Atualizar lista</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Blocos grandes</h3>
+      <p>Painel inicial com botões grandes para cada seção. É o estilo dos apps de IPTV que você já usa, e o mais fácil de levar depois para a TV.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="vitrine" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="ph-top"><span>Início</span><span>🔍</span></div>
+        <div class="ph-body">
+          <div class="hero">Filme em destaque</div>
+          <div class="row-t">Continuar assistindo</div>
+          <div class="row"><div class="poster w"></div><div class="poster w"></div><div class="poster w"></div></div>
+          <div class="row-t">Canais favoritos</div>
+          <div class="row"><div class="poster" style="height:40px;width:40px;border-radius:50%"></div><div class="poster" style="height:40px;width:40px;border-radius:50%"></div><div class="poster" style="height:40px;width:40px;border-radius:50%"></div><div class="poster" style="height:40px;width:40px;border-radius:50%"></div></div>
+          <div class="row-t">Filmes adicionados</div>
+          <div class="row"><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+        </div>
+        <div class="ph-tabs"><span class="on">🏠<br>Início</span><span>📺<br>Ao vivo</span><span>🎬<br>Filmes</span><span>📼<br>Séries</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Vitrine com fileiras</h3>
+      <p>Início com "continuar assistindo", favoritos e novidades em fileiras de capas, no estilo dos serviços de streaming. Mais bonito, mas exige mais trabalho e carrega mais imagens.</p>
+    </div>
+  </div>
+</div>

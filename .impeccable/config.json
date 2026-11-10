@@ -1,0 +1,89 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/busca.html"
+        ],
+        "createdAt": "2026-11-10T13:20:15.934Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/navegacao.html"
+        ],
+        "createdAt": "2026-11-10T13:20:46.095Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/busca.html"
+        ],
+        "createdAt": "2026-11-10T13:20:46.803Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/navegacao.html"
+        ],
+        "createdAt": "2026-11-10T13:20:47.388Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/player-aovivo.html"
+        ],
+        "createdAt": "2026-11-10T13:21:48.226Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/player-aovivo.html"
+        ],
+        "createdAt": "2026-11-10T13:21:48.797Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/grade.html"
+        ],
+        "createdAt": "2026-11-10T13:23:27.856Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/grade.html"
+        ],
+        "createdAt": "2026-11-10T13:23:28.396Z",
+        "reason": "Claude: esboço descartável de brainstorming, celular em miniatura com texto reduzido de propósito"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "d:/docker/Player/.superpowers/brainstorm/1394-1794316701/content/grade.html"
+        ],
+        "createdAt": "2026-11-10T13:23:41.761Z",
+        "reason": "Claude: esboço descartável de brainstorming, células da grade em miniatura"
+      }
+    ]
+  }
+}

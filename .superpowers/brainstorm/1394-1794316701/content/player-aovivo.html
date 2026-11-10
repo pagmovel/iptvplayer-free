@@ -1,0 +1,69 @@
+<h2>Assistindo TV ao vivo: como trocar de canal?</h2>
+<p class="subtitle">Duas formas de assistir com o celular em pé. Nas duas, ao deitar o celular, o vídeo ocupa a tela inteira.</p>
+
+<style>
+  .phone{width:220px;height:440px;margin:0 auto;border:3px solid #444;border-radius:26px;background:#0f1115;color:#e8e8e8;overflow:hidden;display:flex;flex-direction:column;font-size:11px;font-family:system-ui,sans-serif;position:relative}
+  .video{height:124px;background:linear-gradient(135deg,#263238,#000);display:flex;align-items:center;justify-content:center;color:#d0d4da;flex:none;position:relative}
+  .video.full{height:100%}
+  .now{padding:8px 10px;border-bottom:1px solid #1d2027}
+  .now b{display:block;font-size:12px}
+  .now small{color:#a8adb8;font-size:10px}
+  .bar{height:3px;background:#2a2f3a;border-radius:2px;margin-top:5px}
+  .bar i{display:block;width:40%;height:100%;background:#4fc3f7;border-radius:2px}
+  .list{flex:1;overflow:hidden;padding:0 10px}
+  .ch{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #1d2027}
+  .ch.on{color:#4fc3f7}
+  .logo{width:26px;height:26px;border-radius:6px;background:#2a2f3a;flex:none}
+  .ch small{display:block;color:#a8adb8;font-size:10px}
+  .chips{display:flex;gap:5px;padding:7px 10px}
+  .chip{background:#1d2027;border-radius:12px;padding:3px 8px;white-space:nowrap;color:#d0d4da}
+  .chip.on{background:#4fc3f7;color:#000}
+  .ov{position:absolute;left:0;right:0;bottom:0;padding:10px;background:linear-gradient(0deg,rgba(0,0,0,.92),transparent)}
+  .ov b{display:block;font-size:13px}
+  .ov small{color:#d0d4da}
+  .hint{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;color:#d0d4da;font-size:10px}
+  .drawer{position:absolute;left:0;top:0;bottom:0;width:62%;background:rgba(15,17,21,.95);padding:8px;border-right:1px solid #2a2d35}
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="dividida" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="video">▶ vídeo</div>
+        <div class="now"><b>Canal 2 · Futebol ao vivo</b><small>15:00–17:00 · depois: Resenha</small><div class="bar"><i></i></div></div>
+        <div class="chips"><span class="chip on">Esportes</span><span class="chip">Favoritos</span><span class="chip">Todos</span></div>
+        <div class="list">
+          <div class="ch"><div class="logo"></div><div>Canal 1<small>Jornal da manhã</small></div></div>
+          <div class="ch on"><div class="logo"></div><div>Canal 2<small>Futebol ao vivo</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 3<small>Basquete</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 4<small>Tênis</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 5<small>Resumo da rodada</small></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Tela dividida</h3>
+      <p>Vídeo em cima, programa atual com barra de progresso no meio e lista de canais embaixo. Você vê o que passa nos outros canais sem parar o vídeo e troca com um toque.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="cheia" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="video full">▶ vídeo em tela cheia</div>
+        <div class="hint">▲<span>deslize</span>▼</div>
+        <div class="drawer">
+          <div class="ch"><div class="logo"></div><div>Canal 1<small>Jornal</small></div></div>
+          <div class="ch on"><div class="logo"></div><div>Canal 2<small>Futebol</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 3<small>Basquete</small></div></div>
+          <div class="ch"><div class="logo"></div><div>Canal 4<small>Tênis</small></div></div>
+        </div>
+        <div class="ov"><b>Canal 2 · Futebol ao vivo</b><small>15:00–17:00</small><div class="bar"><i></i></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Vídeo grande, gestos</h3>
+      <p>O vídeo ocupa a tela toda. Deslize para cima ou para baixo para ir ao próximo canal, como num zapping. Deslizar a partir da esquerda abre a lista por cima do vídeo.</p>
+    </div>
+  </div>
+</div>

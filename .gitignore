@@ -1,0 +1,8 @@
+# Credenciais e listas do provedor: nunca versionar
+listas.txt
+
+# Arquivos temporários de trabalho (script de coleta e amostras do provedor)
+temp/
+
+# Cache do hook do impeccable (a config de exceções é versionada)
+.impeccable/hook.cache.json

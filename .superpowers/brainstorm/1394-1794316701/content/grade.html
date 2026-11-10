@@ -1,0 +1,73 @@
+<h2>Grade de programação: como você quer ver?</h2>
+<p class="subtitle">Dá para ter as duas. Diga qual é a principal e se a outra também faz falta.</p>
+
+<style>
+  .phone{width:220px;height:440px;margin:0 auto;border:3px solid #444;border-radius:26px;background:#0f1115;color:#e8e8e8;overflow:hidden;display:flex;flex-direction:column;font-size:11px;font-family:system-ui,sans-serif;position:relative}
+  .video{height:124px;background:linear-gradient(135deg,#263238,#000);display:flex;align-items:center;justify-content:center;color:#d0d4da;flex:none}
+  .top{padding:9px 10px;font-weight:600;display:flex;justify-content:space-between}
+  .top span{color:#4fc3f7;font-weight:500}
+  .tabs2{display:flex;border-bottom:1px solid #2a2d35}
+  .tabs2 div{flex:1;text-align:center;padding:7px 0;color:#d0d4da}
+  .tabs2 .on{color:#4fc3f7;border-bottom:2px solid #4fc3f7;font-weight:600}
+  .prog{display:flex;gap:8px;padding:6px 10px;border-bottom:1px solid #1d2027}
+  .prog .h{color:#a8adb8;width:32px;flex:none}
+  .prog.on{background:#16222b}
+  .prog.on .h{color:#4fc3f7}
+  .prog small{display:block;color:#a8adb8;font-size:10px}
+  .days{display:flex;gap:5px;padding:7px 10px}
+  .day{background:#1d2027;border-radius:12px;padding:3px 8px;color:#d0d4da}
+  .day.on{background:#4fc3f7;color:#000}
+  .grid{flex:1;overflow:hidden;position:relative}
+  .times{display:flex;margin-left:44px;color:#a8adb8;font-size:10px;border-bottom:1px solid #2a2d35;padding:4px 0}
+  .times span{width:58px;flex:none}
+  .gr{display:flex;align-items:stretch;height:38px;border-bottom:1px solid #1d2027}
+  .gl{width:40px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid #2a2d35}
+  .gl i{width:24px;height:24px;border-radius:6px;background:#2a2f3a;display:block}
+  .cells{display:flex;gap:2px;padding:3px 2px;overflow:hidden}
+  .cell{background:#1d2027;border-radius:5px;padding:4px 5px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
+  .cell.now{background:#16323f;color:#e8f6fd}
+  .line{position:absolute;top:0;bottom:0;left:86px;width:2px;background:#4fc3f7}
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="por-canal" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="video">▶ vídeo</div>
+        <div class="tabs2"><div>Canais</div><div class="on">Programação</div></div>
+        <div class="days"><span class="day">Ontem</span><span class="day on">Hoje</span><span class="day">Amanhã</span></div>
+        <div class="prog"><span class="h">13:00</span><div>Esporte Espetacular<small>Reprise</small></div></div>
+        <div class="prog on"><span class="h">15:00</span><div>Futebol ao vivo<small>Agora · termina 17:00</small></div></div>
+        <div class="prog"><span class="h">17:00</span><div>Resenha<small>Debate</small></div></div>
+        <div class="prog"><span class="h">18:30</span><div>Jornal local</div></div>
+        <div class="prog"><span class="h">19:30</span><div>Novela</div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Programação do canal, abaixo do vídeo</h3>
+      <p>Na tela dividida, uma aba "Programação" mostra o dia inteiro do canal que você está vendo, com dias anteriores e seguintes. É rápida de olhar e cabe bem no celular.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="grade-completa" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="top">Guia · Hoje <span>Esportes ▾</span></div>
+        <div class="grid">
+          <div class="times"><span>14:00</span><span>15:00</span><span>16:00</span></div>
+          <div class="line"></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell" style="width:40px">Notícias</div><div class="cell now" style="width:110px">Jornal da tarde</div></div></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell" style="width:56px">Esporte</div><div class="cell now" style="width:116px">Futebol ao vivo</div></div></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell now" style="width:80px">Basquete</div><div class="cell" style="width:90px">Resumo</div></div></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell" style="width:30px">…</div><div class="cell now" style="width:60px">Tênis</div><div class="cell" style="width:80px">Vôlei</div></div></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell now" style="width:100px">Documentário</div><div class="cell" style="width:70px">Filme</div></div></div>
+          <div class="gr"><div class="gl"><i></i></div><div class="cells"><div class="cell" style="width:50px">Desenho</div><div class="cell now" style="width:120px">Sessão da tarde</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Grade completa (canais × horários)</h3>
+      <p>Uma tela própria, com um canal por linha e a linha do tempo na horizontal. A linha azul marca o horário atual. Você rola para os lados para ver mais tarde e toca no programa para abrir o canal.</p>
+    </div>
+  </div>
+</div>

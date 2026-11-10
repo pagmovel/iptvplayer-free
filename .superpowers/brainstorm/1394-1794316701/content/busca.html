@@ -1,0 +1,72 @@
+<h2>Como a busca deve mostrar os resultados?</h2>
+<p class="subtitle">Nos dois casos, a busca roda num banco guardado no próprio celular. Os resultados aparecem enquanto você digita, sem carregar a lista inteira na memória.</p>
+
+<style>
+  .phone{width:220px;height:440px;margin:0 auto;border:3px solid #444;border-radius:26px;background:#0f1115;color:#e8e8e8;overflow:hidden;display:flex;flex-direction:column;font-size:11px;font-family:system-ui,sans-serif}
+  .ph-top{padding:10px 12px;font-weight:600}
+  .ph-body{flex:1;overflow:hidden;padding:0 10px}
+  .ph-tabs{display:flex;justify-content:space-around;border-top:1px solid #2a2d35;padding:8px 0;font-size:9px;color:#b8c0c8}
+  .ph-tabs .on{color:#4fc3f7;font-weight:700}
+  .srch{background:#1d2027;border-radius:8px;padding:7px 9px;margin-bottom:8px;border:1px solid #4fc3f7}
+  .chips{display:flex;gap:5px;margin-bottom:8px}
+  .chip{background:#1d2027;border-radius:12px;padding:3px 8px;white-space:nowrap;color:#d0d4da}
+  .chip.on{background:#4fc3f7;color:#000}
+  .sec{font-weight:600;margin:8px 0 5px;display:flex;justify-content:space-between}
+  .sec a{color:#4fc3f7;font-weight:500}
+  .row{display:flex;gap:6px;overflow:hidden}
+  .poster{width:56px;height:80px;border-radius:6px;background:#2a2f3a;flex:none}
+  .round{width:40px;height:40px;border-radius:50%;background:#2a2f3a;flex:none}
+  .it{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid #1d2027}
+  .thumb{width:30px;height:42px;border-radius:4px;background:#2a2f3a;flex:none}
+  .thumb.sq{height:30px}
+  .it small{display:block;color:#a8adb8;font-size:9px}
+  .tag{margin-left:auto;font-size:8px;padding:2px 5px;border-radius:4px;background:#2a2f3a;color:#d0d4da}
+  .count{color:#a8adb8;font-size:9px;margin-bottom:4px}
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="agrupada" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="ph-top">Buscar</div>
+        <div class="ph-body">
+          <div class="srch">globo|</div>
+          <div class="sec">Canais <a>ver 12</a></div>
+          <div class="row"><div class="round"></div><div class="round"></div><div class="round"></div><div class="round"></div></div>
+          <div class="sec">Filmes <a>ver 38</a></div>
+          <div class="row"><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+          <div class="sec">Séries <a>ver 7</a></div>
+          <div class="row"><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+        </div>
+        <div class="ph-tabs"><span>🏠<br>Início</span><span>📺<br>Ao vivo</span><span>🎬<br>Filmes</span><span class="on">🔍<br>Busca</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Agrupada por tipo</h3>
+      <p>Uma busca procura em tudo e mostra uma fileira para Canais, outra para Filmes e outra para Séries, no mesmo estilo da vitrine. "Ver 38" abre a lista completa daquele tipo.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="lista" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="ph-top">Buscar</div>
+        <div class="ph-body">
+          <div class="srch">globo|</div>
+          <div class="chips"><span class="chip on">Tudo</span><span class="chip">Canais</span><span class="chip">Filmes</span><span class="chip">Séries</span></div>
+          <div class="count">57 resultados</div>
+          <div class="it"><div class="thumb sq"></div><div>Globo SP<small>Agora: Jornal Hoje</small></div><span class="tag">AO VIVO</span></div>
+          <div class="it"><div class="thumb sq"></div><div>Globo RJ<small>Agora: Jornal Hoje</small></div><span class="tag">AO VIVO</span></div>
+          <div class="it"><div class="thumb"></div><div>Globo de Ouro<small>2019 · 1h52</small></div><span class="tag">FILME</span></div>
+          <div class="it"><div class="thumb"></div><div>Globoplay Originais<small>3 temporadas</small></div><span class="tag">SÉRIE</span></div>
+          <div class="it"><div class="thumb sq"></div><div>Globo News<small>Agora: Edição das 16h</small></div><span class="tag">AO VIVO</span></div>
+        </div>
+        <div class="ph-tabs"><span>🏠<br>Início</span><span>📺<br>Ao vivo</span><span>🎬<br>Filmes</span><span class="on">🔍<br>Busca</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Lista única com filtro</h3>
+      <p>Uma lista só, com uma etiqueta em cada item dizendo o que ele é. Os botões no topo filtram por tipo. Mostra mais itens por tela e o que está passando agora nos canais.</p>
+    </div>
+  </div>
+</div>
