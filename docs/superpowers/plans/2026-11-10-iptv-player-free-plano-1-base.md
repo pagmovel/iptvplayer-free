@@ -52,7 +52,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T5 · Cliente da API Xtream | `testada` |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
 | 1 | T7 · Banco local (Room + FTS) | `testada` |
-| 1 | T8 · Leitor de XMLTV | `pendente` |
+| 1 | T8 · Leitor de XMLTV | `testada` |
 | 1 | T9 · Carga do catálogo (orquestração) | `pendente` |
 | 1 | T10 · Contas: cofre de senha e repositório | `pendente` |
 | 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `pendente` |
@@ -431,7 +431,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 - Produz: `fun janelaProgramacao(agora: ZonedDateTime): LongRange`, de ontem 00:00 até depois de
   amanhã 23:59:59.999, no fuso de `agora`.
 
-- [ ] **Passo 1: Escrever os testes que falham.**
+- [x] **Passo 1: Escrever os testes que falham.**
 
 ```kotlin
 @Test fun `converte horario com fuso`() {
@@ -451,13 +451,13 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 }
 ```
 
-- [ ] **Passo 2: Rodar e ver falhar.**
-- [ ] **Passo 3: Implementar** com `XmlPullParserFactory.newInstance().newPullParser()`. Leia
+- [x] **Passo 2: Rodar e ver falhar.**
+- [x] **Passo 3: Implementar** com `XmlPullParserFactory.newInstance().newPullParser()`. Leia
   `start`/`stop` pelo padrão `yyyyMMddHHmmss Z` com `DateTimeFormatter`, que funciona no minSdk 26
   sem desugaring. Ignore os atributos `start_timestamp`, porque nem todo XMLTV os tem. Use só os
   filhos `title` e `desc`.
-- [ ] **Passo 4: Rodar e ver passar.**
-- [ ] **Passo 5: Commit.** `feat: leitor de XMLTV em fluxo com janela de 4 dias`.
+- [x] **Passo 4: Rodar e ver passar.**
+- [x] **Passo 5: Commit.** `feat: leitor de XMLTV em fluxo com janela de 4 dias`.
 
 ### T9: Carga do catálogo (orquestração)
 

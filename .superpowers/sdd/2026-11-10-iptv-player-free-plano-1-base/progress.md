@@ -200,3 +200,26 @@ BASE antes da T5: `3d816c3`.
   não tem teste dedicado para códigos como 401/403. Revisor confirmou por fora
   (`git tag`/`@{u}`) que não houve push nem tag.
 - Task 5: complete (commits 3d816c3..90e61b7, review clean, 2 minors deferred).
+
+Volta à ordem numérica do plano a partir daqui (T8, T9, T10, T11).
+
+BASE antes da T8: `b79b812`.
+
+- Task 8: despachado (implementador, modelo sonnet). Brief: `task-8-brief.md`. Relatório
+  esperado em `task-8-report.md`. Instruído sobre `--local` no git config e a convenção de
+  autoria deste projeto (marcos.ronaldo@gmail.com).
+- Task 8: implementado (commit `6781475`), autoria correta. 7/7 testes, verificados pelo
+  caminho alternativo (429 do Maven Central ainda ativo no módulo; não rodou a suíte
+  completa do módulo por isso, só o filtro da própria tarefa — correto, fora do escopo da
+  T8 confirmar o resto).
+- Task 8: pacote de revisão gerado (`review-b79b812..6781475.diff`), revisor despachado
+  (modelo sonnet).
+- Task 8: revisão: ✅ spec conforme (assinaturas, 7 testes literais, mapeamento para
+  `Programa` confirmado contra `Entidades.kt` real). Qualidade **Aprovado**, 0 crítico, 0
+  importante — revisor confirmou à mão o cálculo de fuso e a intersecção da janela nos casos
+  de borda, e que a leitura é de fato em fluxo. 3 minor (deferred): comentário de teste
+  impreciso (linha 45, cita dia 13 que a janela real não alcança); nenhum teste literal com
+  offset negativo (`-0300`), só lacuna de cobertura; `END_DOCUMENT` tratado como fechamento
+  implícito de `<programme>` truncado, aceito silenciosamente — decisão deliberada, sem teste
+  do brief que exija o contrário.
+- Task 8: complete (commits b79b812..6781475, review clean, 3 minors deferred).
