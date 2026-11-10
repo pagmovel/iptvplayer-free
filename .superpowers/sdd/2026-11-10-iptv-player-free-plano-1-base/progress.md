@@ -139,3 +139,32 @@ BASE antes da T6: `6334d39`.
 
 - Task 6: despachado (implementador, modelo sonnet). Brief: `task-6-brief.md`. Relatório
   esperado em `task-6-report.md`. Aviso dado sobre a reordenação (T6 antes de T5, depois T7).
+- Task 6: implementado (commit `0e3a45a`), status DONE_WITH_CONCERNS. 7/7 testes — mas
+  verificados por um caminho alternativo (ver achado de infra abaixo), não pelo
+  `./scripts/gradle.ps1` oficial.
+- `Ruling:` achado de infra real (não é bug da T6): `./scripts/gradle.ps1` falhou 4x porque o
+  Maven Central bloqueia com HTTP 429 (Cloudflare) o artefato
+  `org.robolectric:nativeruntime-dist-compat:1.0.19`, usado por qualquer teste Robolectric do
+  módulo (T7, T9, T10, T11), mesmo filtrando por uma classe só. Investiguei a causa raiz: o
+  volume `iptv-gradle-cache` estava **sempre vazio** (confirmado com `docker run ... du -sh`)
+  porque o script roda como `--user root`, cujo `$HOME` efetivo é `/root`, não
+  `/home/circleci` onde o volume está montado — toda chamada baixava a distribuição e as
+  dependências do zero, o que esgotou o limite do Maven Central. Corrigi com
+  `-e GRADLE_USER_HOME=/home/circleci/.gradle` (commit `96c4432`), verificado de fato: volume
+  foi de 4 KB para 944 MB, e uma segunda chamada igual caiu de 3m41s para 32s. O bloqueio em
+  si (`curl -I` confirma 429, `retry-after: 83929`, ~23h) é externo e **continua ativo**;
+  deve liberar por volta de **2026-11-11 18:48** (horário local). Enquanto durar, aceito como
+  verificação válida o caminho alternativo que o implementador da T6 já demonstrou: compilar
+  o classpath manualmente (classes do Gradle + jars do catálogo) e rodar
+  `java -cp ... org.junit.runner.JUnitCore <Classe>` direto — é execução real, não suposição,
+  só não passa pelo script oficial. Reforçar isso no dispatch de T9/T10/T11 se o bloqueio
+  ainda estiver ativo quando chegar a vez delas. Custo se errado: baixo — é só o canal de
+  verificação, a execução dos testes é real nos dois casos.
+- Task 6: pacote de revisão gerado (`review-6334d39..0e3a45a.diff`), revisor despachado
+  (modelo sonnet).
+- Task 6: revisão: ✅ spec conforme (auxiliares, 4 mapeamentos e campos confirmados contra
+  `dados/Entidades.kt` de verdade), qualidade **Aprovado**, 0 crítico, 0 importante. 2 minor
+  (deferred): `decimal()` só testado com texto, não com número JSON literal; `int()` sem
+  teste dedicado de vazio/nulo/ausente (helper compartilhado, risco baixo). Confirmei eu
+  mesmo (`git tag`, `@{u}`) que não há push nem tag.
+- Task 6: complete (commits 6334d39..0e3a45a, review clean, 2 minors deferred).

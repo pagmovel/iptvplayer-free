@@ -50,7 +50,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `pendente` |
-| 1 | T6 · Mapeamento do JSON Xtream para entidades | `pendente` |
+| 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
 | 1 | T7 · Banco local (Room + FTS) | `testada` |
 | 1 | T8 · Leitor de XMLTV | `pendente` |
 | 1 | T9 · Carga do catálogo (orquestração) | `pendente` |
@@ -337,7 +337,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `paraCanal(contaId)`, `paraFilme(contaId)` e `paraSerie(contaId)`. Cada um devolve `null` sem
   id ou nome.
 
-- [ ] **Passo 1: Escrever os testes que falham.**
+- [x] **Passo 1: Escrever os testes que falham.**
 
 ```kotlin
 @Test fun `numero como texto e como numero`() {
@@ -357,14 +357,14 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 @Test fun `item sem id ou sem nome devolve null`()
 ```
 
-- [ ] **Passo 2: Rodar e ver falhar.**
-- [ ] **Passo 3: Implementar** os auxiliares e os quatro mapeamentos. Os campos vêm da §3.1:
+- [x] **Passo 2: Rodar e ver falhar.**
+- [x] **Passo 3: Implementar** os auxiliares e os quatro mapeamentos. Os campos vêm da §3.1:
   canal (`stream_id`, `name`, `category_id`, `stream_icon`, `epg_channel_id`, `num`), filme
   (`stream_id`, `name`, `category_id`, `stream_icon`, `container_extension`, `year`, `rating`,
   `added`), série (`series_id`, `name`, `category_id`, `cover`, `plot`, `year`, `rating`,
   `last_modified`) e categoria (`category_id`, `category_name`).
-- [ ] **Passo 4: Rodar e ver passar.**
-- [ ] **Passo 5: Commit.** `feat: mapeamento tolerante do JSON Xtream`.
+- [x] **Passo 4: Rodar e ver passar.**
+- [x] **Passo 5: Commit.** `feat: mapeamento tolerante do JSON Xtream`.
 
 ### T7: Banco local (Room + FTS)
 
