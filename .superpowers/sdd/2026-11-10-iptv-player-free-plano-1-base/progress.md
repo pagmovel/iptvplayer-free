@@ -175,3 +175,28 @@ BASE antes da T5: `3d816c3`.
   esperado em `task-5-report.md`. Avisado sobre a reordenação (T5 depois de T6/T7) e sobre o
   bloqueio do Maven Central (já resolvido na causa raiz, mas pode persistir no classpath do
   módulo).
+- Task 5: implementado (commit original `ccf65d2`), status DONE. 8/8 testes, verificados pelo
+  caminho alternativo (429 do Maven Central ainda ativo no módulo).
+- `Ruling:` o implementador rodou `git config user.name`/`user.email` **sem** `--local`, viu
+  o fallback do config global ("Marcos Ronaldo <marcossilva@rochamarinho.adv.br>") e concluiu
+  (errado) que o repositório já tinha autoria local configurada, então não usou as variáveis
+  de ambiente que o dispatch pedia. Conferi eu mesmo: `--local` continua vazio. Perguntei ao
+  dono; decisão dele: **a partir de agora, autoria deste projeto é `Marcos Ronaldo
+  <marcos.ronaldo@gmail.com>`** (não a regra global `marcossilva@rms.adv.br`), só daqui pra
+  frente, sem reescrever commits anteriores a esta correção. Corrigi o commit da T5 com
+  `git commit --amend --reset-author` (ele ainda era HEAD, nada publicado) →
+  `90e61b7`. Registrado em `CLAUDE.md` (commit `d9ff919`). Todo dispatch a partir de agora usa
+  `GIT_AUTHOR_NAME="Marcos Ronaldo" GIT_AUTHOR_EMAIL="marcos.ronaldo@gmail.com"` (idem
+  committer).
+- Task 5: pacote de revisão gerado (`review-3d816c3..90e61b7.diff`), revisor despachado
+  (modelo sonnet).
+- Task 5: revisão: ✅ spec conforme (assinaturas, 4 falhas, 3 URLs, 6 testes literais, reuso
+  dos auxiliares da T6 confirmado contra o arquivo real, followRedirects(false) e streaming
+  sem lista inteira em memória todos verificados). Qualidade **Aprovado**, 0 crítico, 0
+  importante. 2 minor (deferred): `montarRequisicao()` não faz URL-encode de
+  usuario/senha/acao na query string — risco real se a senha decodificada pela T4 tiver
+  caractere reservado (`&`, `#`, espaço), mas o brief só pede interpolação simples, não é
+  desvio de spec; e o mapeamento de qualquer HTTP não-2xx/não-3xx para `ServidorIndisponivel`
+  não tem teste dedicado para códigos como 401/403. Revisor confirmou por fora
+  (`git tag`/`@{u}`) que não houve push nem tag.
+- Task 5: complete (commits 3d816c3..90e61b7, review clean, 2 minors deferred).

@@ -49,7 +49,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `pendente` |
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
 | 1 | T4 · Leitura do link do provedor | `testada` |
-| 1 | T5 · Cliente da API Xtream | `pendente` |
+| 1 | T5 · Cliente da API Xtream | `testada` |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
 | 1 | T7 · Banco local (Room + FTS) | `testada` |
 | 1 | T8 · Leitor de XMLTV | `pendente` |
@@ -292,7 +292,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `ContaInativa(status: String)`, `ServidorIndisponivel(causa: Throwable?)` e
   `RespostaInvalida(detalhe: String)`.
 
-- [ ] **Passo 1: Escrever os testes que falham.** Use JSON sintético no formato da §3.1.
+- [x] **Passo 1: Escrever os testes que falham.** Use JSON sintético no formato da §3.1.
 
 ```kotlin
 @Test fun `autenticar le conta ativa`()            // {"user_info":{"auth":1,"status":"Active","exp_date":"1800000000","max_connections":"2"},...}
@@ -309,16 +309,16 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
 }
 ```
 
-- [ ] **Passo 2: Rodar e ver falhar.**
-- [ ] **Passo 3: Implementar.** Use OkHttp com `callTimeout` de 120 s para listas e 20 s para
+- [x] **Passo 2: Rodar e ver falhar.**
+- [x] **Passo 3: Implementar.** Use OkHttp com `callTimeout` de 120 s para listas e 20 s para
   autenticar. Não siga redirecionamentos para outro host (`followRedirects(false)` no cliente da
   API): um 3xx vira `RespostaInvalida`. `lerLista` usa
   `Json.decodeToSequence<JsonObject>(corpo.byteStream(), DecodeSequenceMode.ARRAY_WRAPPED)`. Os
   números vêm como texto ou número: leia-os com os auxiliares da T6 (`JsonObject.long`/`int`).
   Implemente a T6 primeiro se precisar, ou declare esses auxiliares aqui e mova-os depois. Rode
   o I/O em `Dispatchers.IO`.
-- [ ] **Passo 4: Rodar e ver passar.**
-- [ ] **Passo 5: Commit.** `feat: cliente da API Xtream com leitura em fluxo`.
+- [x] **Passo 4: Rodar e ver passar.**
+- [x] **Passo 5: Commit.** `feat: cliente da API Xtream com leitura em fluxo`.
 
 ### T6: Mapeamento do JSON Xtream para entidades
 

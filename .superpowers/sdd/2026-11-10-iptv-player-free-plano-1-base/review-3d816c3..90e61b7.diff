@@ -1,0 +1,377 @@
+# Review package: 3d816c3..90e61b7
+
+## Commits
+90e61b7 feat: cliente da API Xtream com leitura em fluxo
+
+## Files changed
+ .../progress.md                                    |   7 +
+ app/build.gradle.kts                               |   2 +
+ .../pagmovel/iptvplayer/xtream/FalhaXtream.kt      |  25 ++++
+ .../github/pagmovel/iptvplayer/xtream/XtreamApi.kt | 143 +++++++++++++++++++++
+ .../pagmovel/iptvplayer/xtream/XtreamApiTest.kt    | 133 +++++++++++++++++++
+ 5 files changed, 310 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md b/.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md
+index 9c6aadb..e1f826f 100644
+--- a/.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md
++++ b/.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md
+@@ -161,10 +161,17 @@ BASE antes da T6: `6334d39`.
+   ainda estiver ativo quando chegar a vez delas. Custo se errado: baixo — é só o canal de
+   verificação, a execução dos testes é real nos dois casos.
+ - Task 6: pacote de revisão gerado (`review-6334d39..0e3a45a.diff`), revisor despachado
+   (modelo sonnet).
+ - Task 6: revisão: ✅ spec conforme (auxiliares, 4 mapeamentos e campos confirmados contra
+   `dados/Entidades.kt` de verdade), qualidade **Aprovado**, 0 crítico, 0 importante. 2 minor
+   (deferred): `decimal()` só testado com texto, não com número JSON literal; `int()` sem
+   teste dedicado de vazio/nulo/ausente (helper compartilhado, risco baixo). Confirmei eu
+   mesmo (`git tag`, `@{u}`) que não há push nem tag.
+ - Task 6: complete (commits 6334d39..0e3a45a, review clean, 2 minors deferred).
++
++BASE antes da T5: `3d816c3`.
++
++- Task 5: despachado (implementador, modelo sonnet). Brief: `task-5-brief.md`. Relatório
++  esperado em `task-5-report.md`. Avisado sobre a reordenação (T5 depois de T6/T7) e sobre o
++  bloqueio do Maven Central (já resolvido na causa raiz, mas pode persistir no classpath do
++  módulo).
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index eba4865..6b36c31 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -62,15 +62,17 @@ dependencies {
+     implementation(libs.androidx.compose.ui.tooling.preview)
+     implementation(libs.androidx.compose.material3)
+     debugImplementation(libs.androidx.compose.ui.tooling)
+     debugImplementation(libs.androidx.compose.ui.test.manifest)
+ 
+     implementation(libs.androidx.room.runtime)
+     implementation(libs.androidx.room.ktx)
+     ksp(libs.androidx.room.compiler)
+ 
+     implementation(libs.kotlinx.serialization.json)
++    implementation(libs.okhttp)
+ 
+     testImplementation(libs.junit)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
++    testImplementation(libs.okhttp.mockwebserver)
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt
+new file mode 100644
+index 0000000..36f0042
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt
+@@ -0,0 +1,25 @@
++package io.github.pagmovel.iptvplayer.xtream
++
++/**
++ * Falhas da comunicação com a API Xtream, separadas por causa para quem chama decidir a
++ * mensagem (ex.: credenciais erradas pede novo cadastro; servidor indisponível pede "tentar
++ * de novo"; ver design, "Comportamento quando o stream falha").
++ */
++sealed class FalhaXtream : Exception() {
++
++    /** `auth = 0` na resposta de `player_api.php`: usuário ou senha errados. */
++    class CredenciaisInvalidas : FalhaXtream()
++
++    /** Autenticou, mas o status não é `"Active"` (ex.: `"Expired"`, `"Banned"`, `"Disabled"`). */
++    data class ContaInativa(val status: String) : FalhaXtream()
++
++    /** Erro de rede, timeout ou HTTP não 2xx — não é problema de credenciais nem de dados. */
++    data class ServidorIndisponivel(val causa: Throwable?) : FalhaXtream()
++
++    /**
++     * Corpo que não é o JSON esperado (ex.: HTML de uma página de erro) ou um
++     * redirecionamento para outro host — o provedor real redireciona links de lista M3U para
++     * `www.google.com`, e [XtreamApi] não segue redirecionamento (`followRedirects(false)`).
++     */
++    data class RespostaInvalida(val detalhe: String) : FalhaXtream()
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/XtreamApi.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/XtreamApi.kt
+new file mode 100644
+index 0000000..825a870
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/XtreamApi.kt
+@@ -0,0 +1,143 @@
++package io.github.pagmovel.iptvplayer.xtream
++
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.ExperimentalSerializationApi
++import kotlinx.serialization.SerializationException
++import kotlinx.serialization.json.DecodeSequenceMode
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.decodeToSequence
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import okhttp3.ResponseBody
++import java.io.IOException
++import java.io.InputStream
++import java.util.concurrent.TimeUnit
++
++/**
++ * Cliente da API Xtream Codes (`player_api.php`) do provedor (formato real confirmado no
++ * design, §3.1). Nunca segue redirecionamento para outro host: o provedor redireciona os
++ * links de lista M3U para `www.google.com`, e isso tem que virar
++ * [FalhaXtream.RespostaInvalida] em vez de seguir o redirect.
++ */
++class XtreamApi(
++    private val cliente: OkHttpClient,
++    private val cred: CredenciaisXtream,
++) {
++    data class InfoConta(val ativa: Boolean, val expiraEm: Long?, val maxConexoes: Int?)
++
++    suspend fun autenticar(): InfoConta = withContext(Dispatchers.IO) {
++        val corpo = executar(montarRequisicao(acao = null), timeoutSegundos = 20)
++        val usuario = lerJson(corpo)["user_info"] as? JsonObject
++            ?: throw FalhaXtream.RespostaInvalida("resposta sem \"user_info\"")
++
++        if (usuario.int("auth") != 1) throw FalhaXtream.CredenciaisInvalidas()
++        val status = usuario.texto("status") ?: ""
++        if (status != "Active") throw FalhaXtream.ContaInativa(status)
++
++        InfoConta(
++            ativa = true,
++            expiraEm = usuario.long("exp_date"),
++            maxConexoes = usuario.int("max_connections"),
++        )
++    }
++
++    @OptIn(ExperimentalSerializationApi::class)
++    suspend fun lerLista(
++        acao: String,
++        tamanhoLote: Int = 500,
++        aoLote: suspend (List<JsonObject>) -> Unit,
++    ): Int = withContext(Dispatchers.IO) {
++        val corpo = executar(montarRequisicao(acao), timeoutSegundos = 120)
++        try {
++            val iterador = Json.decodeToSequence<JsonObject>(
++                corpo.byteStream(),
++                DecodeSequenceMode.ARRAY_WRAPPED,
++            ).iterator()
++
++            var total = 0
++            while (iterador.hasNext()) {
++                val lote = ArrayList<JsonObject>(tamanhoLote)
++                while (lote.size < tamanhoLote && iterador.hasNext()) {
++                    lote.add(iterador.next())
++                }
++                aoLote(lote)
++                total += lote.size
++            }
++            total
++        } catch (e: SerializationException) {
++            throw FalhaXtream.RespostaInvalida(e.message ?: "JSON inválido")
++        } catch (e: IOException) {
++            throw FalhaXtream.ServidorIndisponivel(e)
++        } finally {
++            corpo.close()
++        }
++    }
++
++    suspend fun <T> abrirXmltv(ler: suspend (InputStream) -> T): T = withContext(Dispatchers.IO) {
++        val corpo = executar(montarRequisicao(acao = null, caminho = "xmltv.php"), timeoutSegundos = 120)
++        corpo.byteStream().use { ler(it) }
++    }
++
++    fun urlAoVivo(streamId: Long): String =
++        "${cred.servidor}/live/${cred.usuario}/${cred.senha}/$streamId.ts"
++
++    fun urlFilme(streamId: Long, extensao: String): String =
++        "${cred.servidor}/movie/${cred.usuario}/${cred.senha}/$streamId.$extensao"
++
++    fun urlEpisodio(id: Long, extensao: String): String =
++        "${cred.servidor}/series/${cred.usuario}/${cred.senha}/$id.$extensao"
++
++    private fun montarRequisicao(acao: String?, caminho: String = "player_api.php"): Request {
++        val url = buildString {
++            append(cred.servidor)
++            append("/")
++            append(caminho)
++            append("?username=")
++            append(cred.usuario)
++            append("&password=")
++            append(cred.senha)
++            if (acao != null) {
++                append("&action=")
++                append(acao)
++            }
++        }
++        return Request.Builder().url(url).build()
++    }
++
++    /** Bloqueia a thread atual — só é chamado de dentro de [Dispatchers.IO]. */
++    private fun executar(requisicao: Request, timeoutSegundos: Long): ResponseBody {
++        val chamada = cliente.newBuilder()
++            .followRedirects(false)
++            .callTimeout(timeoutSegundos, TimeUnit.SECONDS)
++            .build()
++            .newCall(requisicao)
++
++        val resposta = try {
++            chamada.execute()
++        } catch (e: IOException) {
++            throw FalhaXtream.ServidorIndisponivel(e)
++        }
++
++        if (resposta.code in 300..399) {
++            resposta.close()
++            throw FalhaXtream.RespostaInvalida("redirecionamento para outro host (HTTP ${resposta.code})")
++        }
++        if (!resposta.isSuccessful) {
++            resposta.close()
++            throw FalhaXtream.ServidorIndisponivel(IOException("HTTP ${resposta.code}"))
++        }
++        // Response.body não é nulo a partir do OkHttp 5 (corpo vazio em vez de null).
++        return resposta.body
++    }
++
++    private fun lerJson(corpo: ResponseBody): JsonObject = corpo.use {
++        try {
++            Json.parseToJsonElement(it.string()) as JsonObject
++        } catch (e: Exception) {
++            throw FalhaXtream.RespostaInvalida(e.message ?: "JSON inválido")
++        }
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/xtream/XtreamApiTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/xtream/XtreamApiTest.kt
+new file mode 100644
+index 0000000..a104c01
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/xtream/XtreamApiTest.kt
+@@ -0,0 +1,133 @@
++package io.github.pagmovel.iptvplayer.xtream
++
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import kotlinx.coroutines.test.runTest
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import java.util.concurrent.TimeUnit
++
++class XtreamApiTest {
++
++    private lateinit var servidor: MockWebServer
++    private lateinit var api: XtreamApi
++
++    @Before
++    fun montar() {
++        servidor = MockWebServer()
++        servidor.start()
++        val cred = CredenciaisXtream(servidor.url("/").toString().removeSuffix("/"), "u", "p")
++        api = XtreamApi(OkHttpClient(), cred)
++    }
++
++    @After
++    fun desmontar() {
++        servidor.shutdown()
++    }
++
++    /** Captura a falha lançada pelo bloco e confirma o tipo exato, ou falha o teste. */
++    private suspend inline fun <reified T : FalhaXtream> esperarFalha(crossinline bloco: suspend () -> Unit): T {
++        try {
++            bloco()
++        } catch (e: Throwable) {
++            if (e is T) return e
++            throw e
++        }
++        throw AssertionError("deveria ter lançado ${T::class.simpleName}")
++    }
++
++    @Test
++    fun `autenticar le conta ativa`() = runTest {
++        servidor.enqueue(
++            MockResponse().setBody(
++                """{"user_info":{"auth":1,"status":"Active","exp_date":"1800000000","max_connections":"2"}}""",
++            ),
++        )
++
++        val info = api.autenticar()
++
++        assertEquals(XtreamApi.InfoConta(true, 1800000000L, 2), info)
++        assertEquals("/player_api.php?username=u&password=p", servidor.takeRequest().path)
++    }
++
++    @Test
++    fun `auth 0 vira CredenciaisInvalidas`() = runTest {
++        servidor.enqueue(MockResponse().setBody("""{"user_info":{"auth":0}}"""))
++
++        esperarFalha<FalhaXtream.CredenciaisInvalidas> { api.autenticar() }
++    }
++
++    @Test
++    fun `status Expired vira ContaInativa`() = runTest {
++        servidor.enqueue(
++            MockResponse().setBody(
++                """{"user_info":{"auth":1,"status":"Expired","exp_date":"1800000000","max_connections":"2"}}""",
++            ),
++        )
++
++        val falha = esperarFalha<FalhaXtream.ContaInativa> { api.autenticar() }
++
++        assertEquals("Expired", falha.status)
++    }
++
++    @Test
++    fun `HTTP 503 e timeout viram ServidorIndisponivel`() = runTest {
++        servidor.enqueue(MockResponse().setResponseCode(503))
++        esperarFalha<FalhaXtream.ServidorIndisponivel> { api.autenticar() }
++
++        // Cliente com leitura bem curta para não deixar o teste lento: o corpo nunca chega
++        // a tempo e vira IOException antes mesmo do callTimeout (20s) de autenticar().
++        servidor.enqueue(MockResponse().setHeadersDelay(2, TimeUnit.SECONDS))
++        val credLenta = CredenciaisXtream(servidor.url("/").toString().removeSuffix("/"), "u", "p")
++        val apiLenta = XtreamApi(
++            OkHttpClient.Builder().readTimeout(200, TimeUnit.MILLISECONDS).build(),
++            credLenta,
++        )
++        esperarFalha<FalhaXtream.ServidorIndisponivel> { apiLenta.autenticar() }
++    }
++
++    @Test
++    fun `resposta HTML vira RespostaInvalida`() = runTest {
++        servidor.enqueue(MockResponse().setBody("<!doctype html><html><body>bloqueado</body></html>"))
++
++        esperarFalha<FalhaXtream.RespostaInvalida> { api.autenticar() }
++    }
++
++    @Test
++    fun `redirecionamento para outro host vira RespostaInvalida`() = runTest {
++        // Como o get.php do provedor real, que responde 302 para www.google.com (ver design,
++        // §3.1). followRedirects(false) tem que impedir o cliente de seguir esse redirect.
++        servidor.enqueue(
++            MockResponse().setResponseCode(302).addHeader("Location", "http://www.google.com/"),
++        )
++
++        esperarFalha<FalhaXtream.RespostaInvalida> { api.autenticar() }
++    }
++
++    @Test
++    fun `lerLista entrega em lotes sem passar do tamanho`() = runTest {
++        val itens = (1..1234).joinToString(",") { """{"stream_id":$it,"name":"Canal $it"}""" }
++        servidor.enqueue(MockResponse().setBody("[$itens]"))
++
++        val lotes = mutableListOf<Int>()
++        val total = api.lerLista("get_live_streams", 500) { lote -> lotes += lote.size }
++
++        assertEquals(listOf(500, 500, 234), lotes)
++        assertEquals(1234, total)
++        assertTrue(servidor.takeRequest().path!!.endsWith("&action=get_live_streams"))
++    }
++
++    @Test
++    fun `abrirXmltv entrega o corpo da resposta para quem le`() = runTest {
++        servidor.enqueue(MockResponse().setBody("<tv><programme/></tv>"))
++
++        val lido = api.abrirXmltv { it.readBytes().decodeToString() }
++
++        assertEquals("<tv><programme/></tv>", lido)
++    }
++}
