@@ -1,0 +1,273 @@
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogo.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogo.kt
+new file mode 100644
+index 0000000..60d3984
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogo.kt
+@@ -0,0 +1,94 @@
++package io.github.pagmovel.iptvplayer.carga
++
++import androidx.room.withTransaction
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.dados.CatalogoDao
++import io.github.pagmovel.iptvplayer.dados.Contagem
++import io.github.pagmovel.iptvplayer.dados.Programa
++import io.github.pagmovel.iptvplayer.dados.TipoConteudo
++import io.github.pagmovel.iptvplayer.programacao.janelaProgramacao
++import io.github.pagmovel.iptvplayer.programacao.lerXmltv
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import io.github.pagmovel.iptvplayer.xtream.paraCanal
++import io.github.pagmovel.iptvplayer.xtream.paraCategoria
++import io.github.pagmovel.iptvplayer.xtream.paraFilme
++import io.github.pagmovel.iptvplayer.xtream.paraSerie
++import java.time.ZonedDateTime
++
++/**
++ * Etapa da carga, na ordem em que [CargaCatalogo.executar] as percorre. Serve só para
++ * informar progresso a quem chama (ex.: uma tela de carga) — nenhuma etapa é pulada nem
++ * repetida numa carga que roda até o fim.
++ */
++enum class EtapaCarga { AUTENTICANDO, CATEGORIAS, CANAIS, FILMES, SERIES, PROGRAMACAO, CONCLUIDA }
++
++/**
++ * Orquestra a carga completa do catálogo de uma conta Xtream (ver design, §3.1): autentica,
++ * depois troca categorias/canais/filmes/séries **numa única transação** e, por fim, troca a
++ * programação **noutra transação separada**.
++ *
++ * As duas trocas são transações independentes de propósito, não uma só: falha na programação
++ * não desfaz o catálogo, porque um canal sem programação é aceito pelo design. Já falha em
++ * qualquer etapa do catálogo (categorias/canais/filmes/séries) desfaz a troca inteira — ou o
++ * catálogo novo entra completo, ou o catálogo antigo continua valendo. Falha na autenticação
++ * acontece antes de qualquer transação, então não apaga nada.
++ */
++class CargaCatalogo(
++    private val api: XtreamApi,
++    private val banco: BancoApp,
++    private val contaId: Long,
++    private val agora: () -> ZonedDateTime = { ZonedDateTime.now() },
++) {
++    private val dao: CatalogoDao get() = banco.catalogoDao()
++
++    suspend fun executar(progresso: (EtapaCarga) -> Unit = {}): Contagem {
++        progresso(EtapaCarga.AUTENTICANDO)
++        api.autenticar()
++
++        banco.withTransaction {
++            dao.apagarCatalogo(contaId)
++
++            progresso(EtapaCarga.CATEGORIAS)
++            carregarCategorias(TipoConteudo.AO_VIVO, "get_live_categories")
++            carregarCategorias(TipoConteudo.FILME, "get_vod_categories")
++            carregarCategorias(TipoConteudo.SERIE, "get_series_categories")
++
++            progresso(EtapaCarga.CANAIS)
++            api.lerLista("get_live_streams") { lote ->
++                dao.inserirCanais(lote.mapNotNull { it.paraCanal(contaId) })
++            }
++
++            progresso(EtapaCarga.FILMES)
++            api.lerLista("get_vod_streams") { lote ->
++                dao.inserirFilmes(lote.mapNotNull { it.paraFilme(contaId) })
++            }
++
++            progresso(EtapaCarga.SERIES)
++            api.lerLista("get_series") { lote ->
++                dao.inserirSeries(lote.mapNotNull { it.paraSerie(contaId) })
++            }
++        }
++
++        progresso(EtapaCarga.PROGRAMACAO)
++        banco.withTransaction {
++            dao.apagarProgramacao(contaId)
++            val janela = janelaProgramacao(agora())
++            // lerXmltv (T8) é bloqueante, não suspend — o callback só acumula os lotes aqui;
++            // quem grava é o loop abaixo, de volta no escopo suspend desta transação. Evita
++            // depender de como o Room liga uma chamada suspend feita por dentro de uma ponte
++            // bloqueante (ex.: runBlocking) à conexão da transação em andamento.
++            val lotes = mutableListOf<List<Programa>>()
++            api.abrirXmltv { entrada -> lerXmltv(entrada, contaId, janela) { lote -> lotes += lote } }
++            for (lote in lotes) dao.inserirProgramas(lote)
++        }
++
++        progresso(EtapaCarga.CONCLUIDA)
++        return dao.contagem(contaId)
++    }
++
++    private suspend fun carregarCategorias(tipo: TipoConteudo, acao: String) {
++        api.lerLista(acao) { lote ->
++            dao.inserirCategorias(lote.mapNotNull { it.paraCategoria(contaId, tipo) })
++        }
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogoTest.kt
+new file mode 100644
+index 0000000..b5899fe
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaCatalogoTest.kt
+@@ -0,0 +1,167 @@
++package io.github.pagmovel.iptvplayer.carga
++
++import androidx.room.Room
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.dados.Contagem
++import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import java.time.ZonedDateTime
++import kotlinx.coroutines.test.runTest
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++/**
++ * Orquestração de ponta a ponta (T9): servidor Xtream fake (MockWebServer) + banco Room em
++ * memória (Robolectric, como em [io.github.pagmovel.iptvplayer.dados.CatalogoDaoTest]).
++ * Valores de JSON/XML são só formato inventado — nunca dados do provedor real (ver CLAUDE.md).
++ */
++@RunWith(RobolectricTestRunner::class)
++class CargaCatalogoTest {
++
++    private lateinit var servidor: MockWebServer
++    private lateinit var banco: BancoApp
++    private lateinit var carga: CargaCatalogo
++
++    private val agoraFixo = { ZonedDateTime.parse("2026-11-10T12:00:00Z") }
++
++    @Before
++    fun montar() {
++        servidor = MockWebServer()
++        servidor.start()
++        val cred = CredenciaisXtream(servidor.url("/").toString().removeSuffix("/"), "u", "p")
++        val api = XtreamApi(OkHttpClient(), cred)
++        banco = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java)
++            .allowMainThreadQueries()
++            .build()
++        carga = CargaCatalogo(api, banco, contaId = 1, agora = agoraFixo)
++    }
++
++    @After
++    fun desmontar() {
++        banco.close()
++        servidor.shutdown()
++    }
++
++    /** Captura a falha lançada pelo bloco e confirma o tipo exato, ou falha o teste (mesmo
++     * padrão de XtreamApiTest, T5). */
++    private suspend inline fun <reified T : FalhaXtream> esperarFalha(crossinline bloco: suspend () -> Unit): T {
++        try {
++            bloco()
++        } catch (e: Throwable) {
++            if (e is T) return e
++            throw e
++        }
++        throw AssertionError("deveria ter lançado ${T::class.simpleName}")
++    }
++
++    private fun canal(streamId: Int) = """{"stream_id":$streamId,"name":"Canal $streamId"}"""
++    private fun filme(streamId: Int) = """{"stream_id":$streamId,"name":"Filme $streamId"}"""
++    private fun serie(seriesId: Int) = """{"series_id":$seriesId,"name":"Serie $seriesId"}"""
++    private fun lista(vararg itens: String) = MockResponse().setBody("[${itens.joinToString(",")}]")
++
++    private fun auth() = MockResponse().setBody(
++        """{"user_info":{"auth":1,"status":"Active","exp_date":"1800000000","max_connections":"1"}}""",
++    )
++
++    private fun programa(inicio: String, fim: String, titulo: String) =
++        """<programme start="$inicio" stop="$fim" channel="ch"><title>$titulo</title></programme>"""
++
++    private fun xmltv(vararg programas: String) = MockResponse().setBody("<tv>${programas.joinToString("")}</tv>")
++
++    /** Enfileira uma carga completa e bem-sucedida: autenticação, as 3 categorias (vazias —
++     * a contagem não verifica categoria) e os canais/filmes/séries/programas dados. */
++    private fun enfileirarCargaOk(
++        canais: List<String> = emptyList(),
++        filmes: List<String> = emptyList(),
++        series: List<String> = emptyList(),
++        programas: List<String> = emptyList(),
++    ) {
++        servidor.enqueue(auth())
++        servidor.enqueue(lista()) // get_live_categories
++        servidor.enqueue(lista()) // get_vod_categories
++        servidor.enqueue(lista()) // get_series_categories
++        servidor.enqueue(lista(*canais.toTypedArray()))
++        servidor.enqueue(lista(*filmes.toTypedArray()))
++        servidor.enqueue(lista(*series.toTypedArray()))
++        servidor.enqueue(xmltv(*programas.toTypedArray()))
++    }
++
++    @Test fun `carga completa grava tudo e informa as etapas`() = runTest {
++        enfileirarCargaOk(
++            canais = listOf(canal(1), canal(2), canal(3)),
++            filmes = listOf(filme(1), filme(2)),
++            series = listOf(serie(1)),
++            programas = listOf(
++                programa("20261110030000 +0000", "20261110040000 +0000", "P1"),
++                programa("20261110040000 +0000", "20261110050000 +0000", "P2"),
++                programa("20261111030000 +0000", "20261111040000 +0000", "P3"),
++                programa("20261112030000 +0000", "20261112040000 +0000", "P4"),
++            ),
++        )
++
++        val etapas = mutableListOf<EtapaCarga>()
++        val contagem = carga.executar { etapas += it }
++
++        assertEquals(Contagem(canais = 3, filmes = 2, series = 1, programas = 4), contagem)
++        assertEquals(EtapaCarga.entries, etapas)
++    }
++
++    @Test fun `falha nos filmes mantem o catalogo anterior inteiro`() = runTest {
++        enfileirarCargaOk(canais = listOf(canal(1), canal(2), canal(3)))
++        carga.executar()
++
++        servidor.enqueue(auth())
++        servidor.enqueue(lista()) // get_live_categories
++        servidor.enqueue(lista()) // get_vod_categories
++        servidor.enqueue(lista()) // get_series_categories
++        servidor.enqueue(lista(canal(9)))
++        servidor.enqueue(MockResponse().setResponseCode(503)) // get_vod_streams
++
++        esperarFalha<FalhaXtream.ServidorIndisponivel> { carga.executar() }
++
++        assertEquals(3, banco.catalogoDao().contagem(1).canais) // nada pela metade
++    }
++
++    @Test fun `senha errada nao apaga nada`() = runTest {
++        enfileirarCargaOk(canais = listOf(canal(1), canal(2), canal(3)))
++        carga.executar()
++
++        servidor.enqueue(MockResponse().setBody("""{"user_info":{"auth":0}}"""))
++
++        esperarFalha<FalhaXtream.CredenciaisInvalidas> { carga.executar() }
++
++        assertEquals(Contagem(canais = 3, filmes = 0, series = 0, programas = 0), banco.catalogoDao().contagem(1))
++    }
++
++    @Test fun `falha so na programacao mantem catalogo novo e programacao antiga`() = runTest {
++        enfileirarCargaOk(
++            canais = listOf(canal(1), canal(2)),
++            programas = listOf(programa("20261110030000 +0000", "20261110040000 +0000", "Antigo")),
++        )
++        carga.executar()
++
++        servidor.enqueue(auth())
++        servidor.enqueue(lista()) // get_live_categories
++        servidor.enqueue(lista()) // get_vod_categories
++        servidor.enqueue(lista()) // get_series_categories
++        servidor.enqueue(lista(canal(1), canal(2), canal(3)))
++        servidor.enqueue(lista()) // get_vod_streams
++        servidor.enqueue(lista()) // get_series
++        servidor.enqueue(MockResponse().setResponseCode(503)) // xmltv.php
++
++        esperarFalha<FalhaXtream.ServidorIndisponivel> { carga.executar() }
++
++        val contagem = banco.catalogoDao().contagem(1)
++        assertEquals(3, contagem.canais) // catálogo novo: a transação do catálogo comitou
++        assertEquals(1, contagem.programas) // programação antiga: a transação da programação não comitou
++    }
++}

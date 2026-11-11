@@ -6,24 +6,22 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Esboços das telas: `.superpowers/brainstorm/`
 - Plano atual: [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 
-## Onde paramos (2026-11-10, pausado a pedido do dono)
+## Onde paramos (2026-11-11)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Concluídas e
-  testadas: T1, T4, T5, T6, T7, T8** (7 de 11). Faltam T9, T10, T11.
-- **T9 travada por um bloqueio externo real**, não por bug: o Maven Central devolve HTTP 429
-  para um artefato do Robolectric (`org.robolectric:nativeruntime-dist-compat:1.0.19`), que
-  T9/T10/T11 precisam de verdade (não só de passagem, como T6/T8 driblaram). Libera por volta
-  de **2026-11-11 18:07 GMT (~15:07 em Brasília)** — é um limite fixo no tempo, não piora
-  tentando de novo. Tentei 2 mirrors públicos que respondem 200 (`maven.aliyun.com`,
-  `maven-central.storage-download.googleapis.com` — este último já adicionado em
-  `settings.gradle.kts`), mas o Gradle não trocou de repositório para esse artefato
-  específico. **Próxima sessão:** tentar de novo depois do horário acima; se continuar
-  bloqueado, configurar `exclusiveContent`/`content { includeGroup("org.robolectric") }` no
-  mirror em vez de só declará-lo como extra. Detalhe completo no ledger do SDD
+  testadas: T1, T4, T5, T6, T7, T8, T9** (8 de 11). Faltam T10, T11.
+- O bloqueio de HTTP 429 do Maven Central no artefato do Robolectric
+  (`org.robolectric:nativeruntime-dist-compat:1.0.19`) foi contornado em `settings.gradle.kts`
+  com `exclusiveContent { forRepository { maven(espelho do Google) }; filter {
+  includeModule(...) } }` — força esse módulo específico a vir só do espelho, sem passar pelo
+  Maven Central. Declarar o espelho como repositório extra solto (tentativa anterior) **não
+  funcionava**: o Gradle resolve o POM pelo `mavenCentral()` e não tenta o próximo repositório
+  para o binário do mesmo módulo. T10/T11 também usam Robolectric de verdade e já se beneficiam
+  dessa correção.
+- T9 (`carga/CargaCatalogo.kt`/`CargaCatalogoTest.kt`) commitada (`8729237`) e **verificada de
+  fato** pelo `./scripts/gradle.ps1` oficial: 4/4 testes, BUILD SUCCESSFUL. Revisão em
+  andamento. Detalhe completo no ledger do SDD
   (`.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md`).
-- Código da T9 (`carga/CargaCatalogo.kt`/`CargaCatalogoTest.kt`) está escrito e compila, mas
-  **não foi comitado** — a suíte nunca rodou de fato (nem "ver falhar" nem "ver passar"), e a
-  regra do projeto é não comitar código sem verificação real.
 - Só há commits locais; **nada foi enviado ao GitHub**. Push e tag dependem do "sim" do dono na
   hora (T3 e T11 do plano).
 - Fora do git: `listas.txt` (credenciais) e `temp/` (`coletar_amostras.py` e

@@ -256,3 +256,30 @@ BASE antes da T9: `07d6f3d`.
   depois do horário acima: se ainda bloqueado, considerar repositório com
   `exclusiveContent`/`content { includeGroup(...) }` apontando esse grupo específico para o
   mirror, em vez de só adicionar como extra.
+- Retomada em 2026-11-11, ~14:20 UTC. Conferido antes de qualquer coisa: o `.pom` do artefato
+  já respondia 200, mas o `.jar` binário continuava 429 (`Retry-After: 13578`, bate com
+  ~18:07 GMT — o bloqueio do binário não caiu antes do previsto). Mirrors confirmados com
+  `curl -I` servindo o `.jar` com 200: `maven-central.storage-download.googleapis.com` e
+  `maven.aliyun.com`.
+- Aplicado o próximo passo já previsto: troquei o mirror de repositório extra solto por
+  `exclusiveContent { forRepository { maven(...) }; filter { includeModule("org.robolectric",
+  "nativeruntime-dist-compat") } }` em `settings.gradle.kts` — força esse módulo específico a
+  vir só do mirror, sem o Gradle tentar `mavenCentral()` primeiro. Funcionou de primeira.
+- Docker Desktop estava parado nesta máquina (sessão anterior não tinha deixado rodando).
+  Iniciado com `docker desktop start` (CLI plugin); engine respondeu em ~1 tentativa
+  (29.9.2).
+- Rodei `./scripts/gradle.ps1 testDebugUnitTest --tests "*CargaCatalogoTest*" --rerun-tasks`
+  dentro do container oficial: **BUILD SUCCESSFUL em 9m36s, `:app:testDebugUnitTest`
+  executado de verdade** (não up-to-date). Confirmado no XML
+  (`app/build/test-results/testDebugUnitTest/TEST-...CargaCatalogoTest.xml`):
+  `tests=4 failures=0 errors=0 skipped=0`. **T9 verificada de fato — passo 2/4 do brief
+  cumprido, não mais bloqueado.**
+- Commitado em dois commits separados (autoria `Marcos Ronaldo <marcos.ronaldo@gmail.com>`,
+  convenção deste projeto): `ddbe007` (infra — fix do mirror em `settings.gradle.kts`,
+  trabalho do orquestrador, não do implementador da T9) e `8729237` (código da T9:
+  `CargaCatalogo.kt` + `CargaCatalogoTest.kt`, mensagem conforme o brief).
+- Task 9: pacote de revisão gerado (`review-07d6f3d..8729237.diff`, só o diff do código da
+  T9, sem o commit de infra). Revisor despachado (modelo sonnet, agente em segundo plano),
+  instruído a confirmar por fora a atomicidade das duas transações, a ordem dos `progresso`,
+  os 4 cenários de teste e a ausência de push/tag — sem precisar rodar a suíte de novo (já
+  verificada acima).
