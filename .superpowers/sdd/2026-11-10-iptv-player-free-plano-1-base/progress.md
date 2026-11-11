@@ -364,3 +364,35 @@ BASE antes da T11: `b97b595`.
   `work-testing` não existe ainda), preferência por navegação manual em vez de
   navigation-compose (YAGNI), e que o passo 5 do brief (`assembleDebug`) é verificação mais
   forte que as tarefas anteriores.
+- Task 11: implementado (commits `90db6eb` código, `3d50dc2` skill), status DONE para os
+  passos 1–6 e 9 (7 e 8 corretamente não executados). TDD real: 1ª rodada do
+  `CargaWorkerTest` falhou de verdade por compilação (`TopAppBar` exige
+  `@OptIn(ExperimentalMaterial3Api::class)` nesta versão do catálogo), corrigido e
+  revalidado. Decisões a destacar: `CargaWorker` com construtor secundário
+  `(Context, WorkerParameters)` lido do `AppIptv` (WorkManager resolve por reflexão, sem
+  `WorkerFactory` customizada); `ACCESS_NETWORK_STATE` não declarada no manifest do app
+  (vem do merge do manifest da lib `work-runtime`); `ContasViewModel`/`ResumoViewModel` não
+  são `androidx.lifecycle.ViewModel`, são guardadores de estado comuns (`remember`),
+  `ponytail:` documentado (perdem estado na rotação); 2 métodos novos em `ContasRepositorio`
+  (`listar()`, `editarServidor`); `runBlocking` dentro do callback não-suspend de
+  `CargaCatalogo.executar` para chamar `setProgress`, com `ponytail:` argumentando que é
+  seguro porque o worker roda fora da thread principal; sem `navigation-compose` (enum
+  manual). **Pendência sinalizada pelo próprio implementador**: durante a investigação da
+  API do WorkManager, escreveu temporariamente `.aar`/`.jar` em `$env:TEMP` (fora do
+  projeto, violando a regra crítica de arquivos temporários) — percebeu e apagou antes de
+  terminar, registrou isso no relatório por iniciativa própria.
+- `Ruling`: **verifiquei de fato, não aceitei de olhos fechados.** Rodei
+  `./scripts/gradle.ps1 testDebugUnitTest assembleDebug --rerun-tasks` de forma independente:
+  BUILD SUCCESSFUL, **9 classes, 43 testes, 0 falhas** (XML com timestamp fresco), APK debug
+  gerado (13,2 MB, timestamp do próprio run). Confirmei no manifest empacotado
+  (`app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage/AndroidManifest.xml`)
+  que `ACCESS_NETWORK_STATE` está presente — a afirmação do implementador confere. Confirmei
+  que `CargaWorker(api, banco, contaId)` compila porque `agora` em `CargaCatalogo` tem
+  default (`{ ZonedDateTime.now() }`) — não é um argumento faltando por engano. Confirmei as
+  4 mensagens de `mensagemUsuario()` batem literalmente com o brief. Encontrei (não causado
+  pela T11) `.aar`/`.jar` órfãos em `$env:TEMP` datados de 10/11 (de investigação anterior à
+  pausa da sessão, antes da T9) — não relacionados ao que o implementador da T11 escreveu e
+  já apagou; vou limpar como higiene ao final.
+- Task 11: pacote de revisão gerado (`review-cd904f2..3d50dc2.diff`, só os 2 commits da
+  T11). Revisor despachado (modelo sonnet, agente em segundo plano), informado das
+  verificações já feitas para não repetir a suíte.

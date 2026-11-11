@@ -1,0 +1,1005 @@
+diff --git a/.claude/skills/iptv-xtream-carga/SKILL.md b/.claude/skills/iptv-xtream-carga/SKILL.md
+new file mode 100644
+index 0000000..407c9ba
+--- /dev/null
++++ b/.claude/skills/iptv-xtream-carga/SKILL.md
+@@ -0,0 +1,115 @@
++---
++name: iptv-xtream-carga
++description: Formato real da API Xtream Codes do provedor usado neste projeto, e como o app carrega catálogo/programação em segundo plano sem travar e sem perder dados numa falha parcial. Use antes de tocar em qualquer coisa sob xtream/, carga/ ou programacao/.
++---
++
++# API Xtream e carga do catálogo
++
++## Quando usar esta skill
++
++Antes de mexer em `xtream/XtreamApi.kt`, `xtream/Mapeamento.kt`, `xtream/JsonCampos.kt`,
++`carga/CargaCatalogo.kt`, `carga/CargaWorker.kt` ou `programacao/LeitorXmltv.kt` — ou antes de
++implementar qualquer tela/feature nova que fale com o provedor (detalhe de série, EPG curto
++por canal, catch-up). Lê rápido, mas lê antes: várias pegadinhas abaixo já custaram um ciclo
++de "ver falhar" de verdade numa tarefa anterior.
++
++## Formato real do provedor (confirmado em 2026-11-10, design §3.1)
++
++Coletado só com leitura (`temp/coletar_amostras.py`, nunca versionado — ver CLAUDE.md do
++projeto). Não é documentação genérica do Xtream Codes: são os valores **deste** provedor.
++
++- Base: `player_api.php?username=...&password=...&action=...`. Sem `action`, autentica.
++- Ações usadas pela carga (T9, `CargaCatalogo`): `get_live_categories`, `get_vod_categories`,
++  `get_series_categories`, `get_live_streams`, `get_vod_streams`, `get_series`. Resposta: um
++  array JSON (lido em streaming, ver "Acertos" abaixo).
++- `xmltv.php` (sem `action`): XML da programação, **8,2 MB** no provedor real. Horários em
++  UTC (`+0000`), com `start`/`stop` no formato `AAAAMMDDHHmmss +0000` e também os atributos
++  `start_timestamp`/`stop_timestamp` (não usados ainda pelo parser).
++- Volumes reais (mudam com o tempo, mas dão a ordem de grandeza pra validar uma carga):
++  **39 categorias ao vivo / 946 canais**; **76 categorias de filmes / 16.122 filmes** (6,3 MB
++  de JSON); **39 categorias de séries / 8.714 séries** (7,6 MB de JSON).
++- Conta: `max_connections = 2`; formatos aceitos `m3u8`, `ts`, `rtmp`; servidor XUI.
++- `auth`/`status` só aparecem dentro de `user_info` na resposta sem `action` (autenticação):
++  `auth` **1** autenticou, **0** não (usuário/senha errados); `status` precisa ser
++  `"Active"` — outros valores (`"Expired"`, `"Banned"`, `"Disabled"`) significam conta válida
++  mas inativa.
++
++## Pegadinhas confirmadas (não suponha o contrário sem reler o código)
++
++1. **`get.php` (lista M3U) redireciona para `www.google.com`, não para o conteúdo.** Testado
++   nos 4 servidores do provedor, nos formatos TS e HLS, com qualquer User-Agent. Por isso
++   `XtreamApi` usa `followRedirects(false)` e qualquer `3xx` vira
++   `FalhaXtream.RespostaInvalida` (nunca segue o redirect) — ver `XtreamApiTest`, teste
++   "redirecionamento para outro host vira RespostaInvalida". É também por isso que o design
++   descartou login por M3U como não-objetivo: o provedor parece bloquear esse caminho.
++   **[INCONCLUSIVO]**: só testado a partir da rede desta máquina, não do celular do dono.
++
++2. **Tipos inconsistentes no JSON**: o mesmo campo vem às vezes como número, às vezes como
++   string numérica (ex.: `"auth":1` vs `"auth":"1"`), e pode vir ausente, `null` ou string
++   vazia. `JsonCampos.kt` centraliza a tolerância num único helper privado
++   (`primitivoOuNull`), e os 4 extratores públicos (`texto`, `long`, `int`, `decimal`) leem
++   `JsonPrimitive.content` sem checar `isString` antes de converter — não escreva um parser
++   novo que confia no tipo declarado do JSON.
++
++3. **`get_series_info` traz `seasons` vazio**, mesmo quando a série tem episódios de verdade
++   — os episódios aparecem em `episodes["1"]`, `episodes["2"]`, etc. **Quem for implementar
++   a tela de detalhe de série (fora do escopo desta tarefa) precisa montar a lista de
++   temporadas a partir das chaves de `episodes`, nunca a partir de `seasons`.** Isso ainda
++   não está implementado no código — é um achado de exploração (design §3.1), não um
++   comportamento já coberto por teste.
++
++4. **Ids de EPG repetidos no XMLTV**: o mesmo `epg_channel_id` aparece em mais de um `<channel>`
++   do XMLTV (ex.: a versão FHD e a versão HD do mesmo canal usam o mesmo id). Hoje isso não
++   quebra nada porque `Programa` grava por `(contaId, epgId, inicio)` e aceita duplicata entre
++   canais diferentes com o mesmo `epgId` — mas **quem for casar canal × programação (tela de
++   TV ao vivo, Fase 2) vai achar mais de um canal puxando a mesma entrada de EPG**, e isso é
++   esperado, não bug.
++
++5. **`get_short_epg` voltou vazio no primeiro canal testado** — nem todo canal tem
++   programação. O design já prevê isso ("Canal sem programação: o app mostra 'Sem
++   programação' em vez de ficar vazio ou travar"); ainda não implementado.
++
++6. Servidor não tem TLS (`http://`) — por isso o manifest tem
++   `android:usesCleartextTraffic="true"`; isso não é uma pegadinha a corrigir, é intencional.
++
++## Acertos (não desfazer sem motivo)
++
++- **Streaming em lotes, nunca a lista inteira na memória**: `XtreamApi.lerLista(acao,
++  tamanhoLote=500, aoLote)` decodifica o JSON como sequência (`Json.decodeToSequence`,
++  `DecodeSequenceMode.ARRAY_WRAPPED`) e entrega lotes; `LeitorXmltv.lerXmltv` usa
++  `XmlPullParser` evento a evento, também em lotes. Dado os volumes reais (16 mil filmes, 8,2
++  MB de XMLTV), montar a lista inteira antes de gravar era exatamente o anti-objetivo que
++  motivou o projeto (design, §2).
++- **Duas transações separadas em `CargaCatalogo.executar`**: uma para
++  categorias+canais+filmes+séries, outra para a programação. Falha na programação não desfaz
++  o catálogo recém-carregado, e falha em qualquer etapa do catálogo desfaz o catálogo inteiro
++  (nunca "pela metade"). Ver os 4 cenários de `CargaCatalogoTest` para o motivo de cada
++  transação ter esse limite exato.
++- **`followRedirects(false)` no `OkHttpClient` de `XtreamApi`** — sem isso, o redirecionamento
++  do `get.php` (pegadinha 1) seria seguido silenciosamente para `www.google.com` e o app
++  tentaria interpretar HTML como JSON/XMLTV.
++- **Mensagem de erro traduzida num único lugar**: `FalhaXtream.mensagemUsuario()` (em
++  `xtream/FalhaXtream.kt`) é a única tradução pt-BR dos 4 casos de falha, usada tanto pelo
++  `CargaWorker` quanto pela tela de contas — evita duas traduções divergindo com o tempo.
++- **Robolectric + MockWebServer + Room em memória**, sem emulador nem ambiente local de build
++  (a máquina do dono não tem SDK Android): todo teste de `xtream/`, `carga/` e `conta/` roda
++  assim, com dados **sintéticos** (nunca os de `temp/amostras/`, que não podem ir pro
++  repositório público).
++- **Infra do Robolectric**: o artefato `org.robolectric:nativeruntime-dist-compat` trava com
++  HTTP 429 no Maven Central; a correção real foram dois ajustes (não um só): `exclusiveContent`
++  em `settings.gradle.kts` (força esse módulo a vir só do espelho do Google, porque declarar o
++  espelho como repositório extra solto não bastou) **e** a system property
++  `robolectric.dependency.repo.url` em `app/build.gradle.kts` (o fetcher interno de
++  `android-all`/`android-all-instrumented` do Robolectric não passa pela resolução de
++  dependências do Gradle, então o `exclusiveContent` não alcança ele).
++
++## Como validar
++
++- Automatizado (dados sintéticos, todo PR): `./scripts/gradle.ps1 testDebugUnitTest`. Cobre
++  `XtreamApiTest` (autenticação, falhas, redirecionamento), `MapeamentoTest` (tolerância de
++  tipos), `LeitorXmltvTest` (janela de programação) e `CargaCatalogoTest`/`CargaWorkerTest`
++  (transações e tradução de erro).
++- Manual, no celular do dono, com a conta real (único jeito de validar contra o provedor de
++  verdade — ver CLAUDE.md, "Sem ambiente local de build/emulador"): depois de cadastrar a
++  conta e esperar a carga, o resumo deve mostrar números **próximos** de 946 canais, 16.122
++  filmes e 8.714 séries (o provedor muda isso com o tempo, não é um valor fixo a bater exato).
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 1bc9a89..2e43865 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -82,6 +82,8 @@ dependencies {
+     implementation(libs.androidx.room.ktx)
+     ksp(libs.androidx.room.compiler)
+ 
++    implementation(libs.androidx.work.runtime)
++
+     implementation(libs.kotlinx.serialization.json)
+     implementation(libs.okhttp)
+ 
+@@ -89,6 +91,9 @@ dependencies {
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+     testImplementation(libs.okhttp.mockwebserver)
++    // TestListenableWorkerBuilder (T11, CargaWorkerTest) — testa o CoroutineWorker sem
++    // precisar de um WorkManager real rodando.
++    testImplementation(libs.androidx.work.testing)
+     // XmlPullParserFactory não roda fora do Android/Robolectric; kxml2 fornece a
+     // implementação org.xmlpull.v1 para o teste JVM puro de LeitorXmltvTest (T8).
+     testImplementation(libs.kxml2)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 0815433..5ebb3cd 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -4,7 +4,11 @@
+     <!-- O provedor de IPTV só serve conteúdo por http (sem TLS); ver próximas tarefas. -->
+     <uses-permission android:name="android.permission.INTERNET" />
+ 
++    <!-- ACCESS_NETWORK_STATE não precisa ser declarada aqui: o próprio manifest da
++         work-runtime (AAR) já a declara, e o merge do AGP traz ela pra este app (confirmado
++         extraindo o AndroidManifest.xml real de work-runtime-2.12.0.aar nesta sessão). -->
+     <application
++        android:name=".AppIptv"
+         android:allowBackup="true"
+         android:icon="@mipmap/ic_launcher"
+         android:label="@string/app_name"
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+new file mode 100644
+index 0000000..c624671
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+@@ -0,0 +1,26 @@
++package io.github.pagmovel.iptvplayer
++import android.app.Application
++import androidx.room.Room
++import io.github.pagmovel.iptvplayer.conta.Cofre
++import io.github.pagmovel.iptvplayer.conta.CofreKeystore
++import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import okhttp3.OkHttpClient
++
++/**
++ * Monta à mão as dependências do app — banco, cofre de senhas e repositório de contas — sem
++ * framework de DI (mesma decisão do resto do app). [io.github.pagmovel.iptvplayer.carga.CargaWorker]
++ * lê essas dependências de volta daqui, pelo construtor de 2 parâmetros que o WorkManager usa
++ * por reflexão (ver o construtor secundário dele); não precisa de `Configuration.Provider`
++ * nem de `WorkerFactory` customizada no `Configuration` do app.
++ */
++class AppIptv : Application() {
++    val banco: BancoApp by lazy {
++        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db").build()
++    }
++    val cofre: Cofre by lazy { CofreKeystore() }
++    val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }
++    val contasRepositorio: ContasRepositorio by lazy { ContasRepositorio(banco, cofre, criarApi) }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaWorker.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaWorker.kt
+new file mode 100644
+index 0000000..488a32c
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/carga/CargaWorker.kt
+@@ -0,0 +1,91 @@
++package io.github.pagmovel.iptvplayer.carga
++import android.content.Context
++import androidx.work.Constraints
++import androidx.work.CoroutineWorker
++import androidx.work.ExistingWorkPolicy
++import androidx.work.NetworkType
++import androidx.work.OneTimeWorkRequestBuilder
++import androidx.work.WorkManager
++import androidx.work.WorkerParameters
++import androidx.work.workDataOf
++import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import io.github.pagmovel.iptvplayer.xtream.mensagemUsuario
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.runBlocking
++
++private const val CHAVE_CONTA_ID = "contaId"
++private const val CHAVE_ETAPA = "etapa"
++private const val CHAVE_MENSAGEM = "mensagem"
++
++/**
++ * Carrega o catálogo de uma conta em segundo plano (ver [CargaCatalogo]), via WorkManager.
++ *
++ * O construtor de 5 parâmetros recebe as dependências direto — é o que os testes usam, com
++ * `TestListenableWorkerBuilder` + uma `WorkerFactory` de teste (ver `CargaWorkerTest`), sem
++ * precisar do [AppIptv] real (que tem um [io.github.pagmovel.iptvplayer.conta.CofreKeystore]
++ * que não funciona sob Robolectric). O construtor de 2 parâmetros é o que o WorkManager chama
++ * por reflexão em produção (`WorkerFactory.createWorkerWithDefaultFallback`, que procura
++ * exatamente um construtor `(Context, WorkerParameters)`), e resolve as dependências reais a
++ * partir do [AppIptv] — sem framework de DI, como o resto do app.
++ */
++class CargaWorker(
++    appContext: Context,
++    params: WorkerParameters,
++    private val banco: BancoApp,
++    private val contasRepositorio: ContasRepositorio,
++    private val criarApi: (CredenciaisXtream) -> XtreamApi,
++) : CoroutineWorker(appContext, params) {
++
++    constructor(appContext: Context, params: WorkerParameters) : this(
++        appContext,
++        params,
++        (appContext.applicationContext as AppIptv).banco,
++        (appContext.applicationContext as AppIptv).contasRepositorio,
++        (appContext.applicationContext as AppIptv).criarApi,
++    )
++
++    override suspend fun doWork(): Result {
++        val contaId = inputData.getLong(CHAVE_CONTA_ID, -1L)
++        if (contaId == -1L) return Result.failure(falha("Conta inválida."))
++        val conta = banco.contaDao().listar().first().firstOrNull { it.id == contaId }
++            ?: return Result.failure(falha("Conta não encontrada."))
++        return try {
++            val api = criarApi(contasRepositorio.credenciais(conta))
++            CargaCatalogo(api, banco, contaId).executar { etapa ->
++                // ponytail: setProgress é suspend e o callback de executar() não é; como o
++                // worker já roda numa thread de fundo (nunca a principal — ver doc de
++                // CoroutineWorker, usa Dispatchers.Default por padrão), bloquear essa thread
++                // de fundo brevemente com runBlocking é aceitável. Trocar o parâmetro
++                // `progresso` de CargaCatalogo.executar para suspend se isso emperrar a carga.
++                runBlocking { setProgress(workDataOf(CHAVE_ETAPA to etapa.name)) }
++            }
++            banco.contaDao().marcarCarga(contaId, System.currentTimeMillis())
++            Result.success()
++        } catch (e: FalhaXtream) {
++            Result.failure(falha(e.mensagemUsuario()))
++        }
++    }
++
++    private fun falha(mensagem: String) = workDataOf(CHAVE_MENSAGEM to mensagem)
++
++    companion object {
++        /** Nome do trabalho único do WorkManager para a conta — no máximo uma carga por vez por conta. */
++        fun nomeTrabalho(contaId: Long) = "carga-$contaId"
++
++        /** Enfileira a carga da conta [contaId], substituindo nenhuma carga já em andamento dela. */
++        fun enfileirar(workManager: WorkManager, contaId: Long) {
++            val pedido = OneTimeWorkRequestBuilder<CargaWorker>()
++                .setInputData(workDataOf(CHAVE_CONTA_ID to contaId))
++                .setConstraints(
++                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
++                )
++                .build()
++            workManager.enqueueUniqueWork(nomeTrabalho(contaId), ExistingWorkPolicy.KEEP, pedido)
++        }
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt
+index 3d8ca4e..da33425 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt
+@@ -4,6 +4,7 @@ import io.github.pagmovel.iptvplayer.dados.Conta
+ import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
+ import io.github.pagmovel.iptvplayer.xtream.XtreamApi
+ import androidx.room.withTransaction
++import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.first
+ /** Conta não fica sem atualizar o catálogo por mais de 12h (ver design, §3.1). */
+ private const val INTERVALO_CARGA_MS = 12 * 60 * 60 * 1000L
+@@ -62,4 +63,14 @@ class ContasRepositorio(
+         val ultima = conta.ultimaCargaEm ?: return true
+         return agoraMs - ultima > INTERVALO_CARGA_MS
+     }
++    /** Todas as contas salvas (a tela de contas se atualiza sozinha, ver [ContaDao.listar]). */
++    fun listar(): Flow<List<Conta>> = banco.contaDao().listar()
++    /**
++     * Troca só o servidor da conta (T11: o provedor dá vários endereços para a mesma conta,
++     * ver design §2). Não testa a credencial de novo contra o servidor novo antes de salvar —
++     * se o endereço estiver errado, a próxima carga reporta isso como uma falha normal.
++     */
++    suspend fun editarServidor(conta: Conta, servidor: String) {
++        banco.contaDao().atualizar(conta.copy(servidor = servidor))
++    }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt
+index 04298c5..e5c1d7b 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/MainActivity.kt
+@@ -3,36 +3,19 @@ package io.github.pagmovel.iptvplayer.ui
+ import android.os.Bundle
+ import androidx.activity.ComponentActivity
+ import androidx.activity.compose.setContent
+-import androidx.compose.foundation.layout.Box
+-import androidx.compose.foundation.layout.fillMaxSize
+-import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.Surface
+-import androidx.compose.material3.Text
+-import androidx.compose.material3.darkColorScheme
+-import androidx.compose.runtime.Composable
+-import androidx.compose.ui.Alignment
+-import androidx.compose.ui.Modifier
++import io.github.pagmovel.iptvplayer.AppIptv
+ 
+ /**
+- * Esqueleto do app: só mostra o nome em tema escuro. As próximas tarefas adicionam o login
+- * Xtream e a navegação entre telas.
++ * Hospeda a navegação manual entre Contas e Resumo (ver [Navegacao]), com o tema escuro do
++ * design (ver [TemaIptv]).
+  */
+ class MainActivity : ComponentActivity() {
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         setContent {
+-            MaterialTheme(colorScheme = darkColorScheme()) {
+-                Surface(modifier = Modifier.fillMaxSize()) {
+-                    TelaEsqueleto()
+-                }
++            TemaIptv {
++                Navegacao(applicationContext as AppIptv)
+             }
+         }
+     }
+ }
+-
+-@Composable
+-private fun TelaEsqueleto() {
+-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+-        Text(text = "IPTV Player Free")
+-    }
+-}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+new file mode 100644
+index 0000000..b31be9e
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+@@ -0,0 +1,37 @@
++package io.github.pagmovel.iptvplayer.ui
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.work.WorkManager
++import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.ui.contas.ContasTela
++import io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel
++import io.github.pagmovel.iptvplayer.ui.resumo.ResumoTela
++import io.github.pagmovel.iptvplayer.ui.resumo.ResumoViewModel
++
++/**
++ * Navegação manual entre as duas telas do app (Contas e Resumo) — sem
++ * `androidx.navigation:navigation-compose`, que o catálogo nem declara: o app só tem duas
++ * telas e uma troca simples de estado resolve, sem precisar de rotas/back stack de uma
++ * biblioteca de navegação (ver YAGNI do brief T11).
++ */
++private enum class Tela { RESUMO, CONTAS }
++
++@Composable
++fun Navegacao(app: AppIptv) {
++    var tela by remember { mutableStateOf(Tela.RESUMO) }
++    val workManager = remember { WorkManager.getInstance(app) }
++    when (tela) {
++        Tela.RESUMO -> ResumoTela(
++            viewModel = remember { ResumoViewModel(app.banco, app.contasRepositorio, workManager) },
++            onPrecisaDeConta = { tela = Tela.CONTAS },
++            onGerenciarContas = { tela = Tela.CONTAS },
++        )
++        Tela.CONTAS -> ContasTela(
++            viewModel = remember { ContasViewModel(app.contasRepositorio) },
++            onVoltar = { tela = Tela.RESUMO },
++        )
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Tema.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Tema.kt
+new file mode 100644
+index 0000000..8988c3c
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Tema.kt
+@@ -0,0 +1,42 @@
++package io.github.pagmovel.iptvplayer.ui
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Surface
++import androidx.compose.material3.Typography
++import androidx.compose.material3.darkColorScheme
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.unit.sp
++
++/**
++ * Tema escuro do design aprovado (esboços em `.superpowers/brainstorm/`): fundo quase preto,
++ * destaque azul-ciano, e nenhum texto do app abaixo de 14sp.
++ */
++private val Fundo = Color(0xFF0F1115)
++private val Destaque = Color(0xFF4FC3F7)
++
++private val cores = darkColorScheme(
++    primary = Destaque,
++    secondary = Destaque,
++    background = Fundo,
++    surface = Fundo,
++)
++
++// Só os estilos que, por padrão, ficam abaixo de 14sp no Material 3 (bodySmall 12sp,
++// labelMedium 12sp, labelSmall 11sp) — o resto já atende o mínimo sem precisar mudar.
++private val base = Typography()
++private val tipografia = base.copy(
++    bodySmall = base.bodySmall.copy(fontSize = 14.sp),
++    labelMedium = base.labelMedium.copy(fontSize = 14.sp),
++    labelSmall = base.labelSmall.copy(fontSize = 14.sp),
++)
++
++@Composable
++fun TemaIptv(conteudo: @Composable () -> Unit) {
++    MaterialTheme(colorScheme = cores, typography = tipografia) {
++        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
++            conteudo()
++        }
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasTela.kt
+new file mode 100644
+index 0000000..af4b2d4
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasTela.kt
+@@ -0,0 +1,165 @@
++@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
++
++package io.github.pagmovel.iptvplayer.ui.contas
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.FloatingActionButton
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBar
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalClipboardManager
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.conta.lerLinkXtream
++import io.github.pagmovel.iptvplayer.dados.Conta
++import kotlinx.coroutines.launch
++
++/**
++ * Tela de contas (brief T11): lista, adicionar (com "colar link do provedor"), ativar,
++ * editar servidor e apagar. Tela provisória — plano 2/3 pode trazer navegação própria.
++ */
++@Composable
++fun ContasTela(viewModel: ContasViewModel, onVoltar: () -> Unit) {
++    val contas by viewModel.contas.collectAsState(initial = emptyList())
++    var mostrarFormulario by remember { mutableStateOf(false) }
++    var contaEmEdicao by remember { mutableStateOf<Conta?>(null) }
++    var contaParaApagar by remember { mutableStateOf<Conta?>(null) }
++    val escopo = rememberCoroutineScope()
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("Contas") },
++                navigationIcon = { TextButton(onClick = onVoltar) { Text("Voltar") } },
++            )
++        },
++        floatingActionButton = {
++            FloatingActionButton(onClick = { contaEmEdicao = null; mostrarFormulario = true }) {
++                Text("+")
++            }
++        },
++    ) { preenchimento ->
++        LazyColumn(modifier = Modifier.padding(preenchimento).fillMaxSize()) {
++            items(contas, key = { it.id }) { conta ->
++                LinhaConta(
++                    conta = conta,
++                    onAtivar = { escopo.launch { viewModel.ativar(conta.id) } },
++                    onEditar = { contaEmEdicao = conta; mostrarFormulario = true },
++                    onApagar = { contaParaApagar = conta },
++                )
++            }
++        }
++    }
++
++    if (mostrarFormulario) {
++        FormularioConta(
++            viewModel = viewModel,
++            contaEmEdicao = contaEmEdicao,
++            onFechar = { mostrarFormulario = false },
++        )
++    }
++
++    contaParaApagar?.let { conta ->
++        AlertDialog(
++            onDismissRequest = { contaParaApagar = null },
++            title = { Text("Apagar conta") },
++            text = { Text("Apagar \"${conta.nome}\" e todo o catálogo dela?") },
++            confirmButton = {
++                TextButton(onClick = {
++                    escopo.launch { viewModel.apagar(conta.id) }
++                    contaParaApagar = null
++                }) { Text("Apagar") }
++            },
++            dismissButton = { TextButton(onClick = { contaParaApagar = null }) { Text("Cancelar") } },
++        )
++    }
++}
++
++@Composable
++private fun LinhaConta(conta: Conta, onAtivar: () -> Unit, onEditar: () -> Unit, onApagar: () -> Unit) {
++    ListItem(
++        headlineContent = { Text(conta.nome + if (conta.ativa) " (ativa)" else "") },
++        supportingContent = { Text(conta.servidor) },
++        trailingContent = {
++            Column {
++                if (!conta.ativa) TextButton(onClick = onAtivar) { Text("Ativar") }
++                TextButton(onClick = onEditar) { Text("Editar") }
++                TextButton(onClick = onApagar) { Text("Apagar") }
++            }
++        },
++    )
++}
++
++@Composable
++private fun FormularioConta(viewModel: ContasViewModel, contaEmEdicao: Conta?, onFechar: () -> Unit) {
++    var nome by remember { mutableStateOf(contaEmEdicao?.nome ?: "") }
++    var servidor by remember { mutableStateOf(contaEmEdicao?.servidor ?: "") }
++    var usuario by remember { mutableStateOf(contaEmEdicao?.usuario ?: "") }
++    var senha by remember { mutableStateOf("") }
++    var avisoLink by remember { mutableStateOf<String?>(null) }
++    val clipboard = LocalClipboardManager.current
++    val escopo = rememberCoroutineScope()
++    val ehEdicao = contaEmEdicao != null
++
++    AlertDialog(
++        onDismissRequest = onFechar,
++        title = { Text(if (ehEdicao) "Editar servidor" else "Adicionar conta") },
++        text = {
++            Column {
++                if (!ehEdicao) {
++                    OutlinedTextField(value = nome, onValueChange = { nome = it }, label = { Text("Nome") })
++                    TextButton(onClick = {
++                        val texto = clipboard.getText()?.text.orEmpty()
++                        val cred = lerLinkXtream(texto)
++                        if (cred == null) {
++                            avisoLink = "Link não reconhecido"
++                        } else {
++                            avisoLink = null
++                            servidor = cred.servidor
++                            usuario = cred.usuario
++                            senha = cred.senha
++                        }
++                    }) { Text("Colar link do provedor") }
++                    avisoLink?.let { Text(it, color = MaterialTheme.colorScheme.error) }
++                }
++                OutlinedTextField(value = servidor, onValueChange = { servidor = it }, label = { Text("Servidor") })
++                if (!ehEdicao) {
++                    OutlinedTextField(value = usuario, onValueChange = { usuario = it }, label = { Text("Usuário") })
++                    OutlinedTextField(value = senha, onValueChange = { senha = it }, label = { Text("Senha") })
++                }
++                viewModel.erro?.let { Text(it, color = MaterialTheme.colorScheme.error) }
++                if (viewModel.carregando) CircularProgressIndicator()
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = {
++                escopo.launch {
++                    val ok = if (contaEmEdicao != null) {
++                        viewModel.editarServidor(contaEmEdicao, servidor)
++                        true
++                    } else {
++                        viewModel.salvar(nome, CredenciaisXtream(servidor, usuario, senha))
++                    }
++                    if (ok) onFechar()
++                }
++            }) { Text("Salvar") }
++        },
++        dismissButton = { TextButton(onClick = onFechar) { Text("Cancelar") } },
++    )
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasViewModel.kt
+new file mode 100644
+index 0000000..918a2b3
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/contas/ContasViewModel.kt
+@@ -0,0 +1,48 @@
++package io.github.pagmovel.iptvplayer.ui.contas
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.dados.Conta
++import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
++import io.github.pagmovel.iptvplayer.xtream.mensagemUsuario
++import kotlinx.coroutines.flow.Flow
++
++/**
++ * Estado e ações da tela de contas.
++ *
++ * ponytail: não é um `androidx.lifecycle.ViewModel` — é só um guardador de estado comum
++ * (`remember` na tela, ver [io.github.pagmovel.iptvplayer.ui.Navegacao]), suficiente para
++ * esta tela. Perde o formulário aberto numa rotação de tela; trocar por
++ * `androidx.lifecycle.ViewModel` (já disponível via activity-compose, sem dependência nova)
++ * se isso incomodar de verdade no uso real.
++ */
++class ContasViewModel(private val repositorio: ContasRepositorio) {
++    val contas: Flow<List<Conta>> = repositorio.listar()
++
++    var carregando by mutableStateOf(false)
++        private set
++    var erro by mutableStateOf<String?>(null)
++        private set
++
++    /** Testa a credencial e salva; `erro` fica com a mensagem traduzida se falhar. */
++    suspend fun salvar(nome: String, cred: CredenciaisXtream): Boolean {
++        carregando = true
++        erro = null
++        val resultado = repositorio.testarESalvar(nome, cred)
++        carregando = false
++        (resultado.exceptionOrNull() as? FalhaXtream)?.let { erro = it.mensagemUsuario() }
++        return resultado.isSuccess
++    }
++
++    suspend fun ativar(id: Long) = repositorio.ativar(id)
++
++    suspend fun apagar(id: Long) = repositorio.apagar(id)
++
++    suspend fun editarServidor(conta: Conta, servidor: String) = repositorio.editarServidor(conta, servidor)
++
++    fun limparErro() {
++        erro = null
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+new file mode 100644
+index 0000000..b64947a
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+@@ -0,0 +1,115 @@
++package io.github.pagmovel.iptvplayer.ui.resumo
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.Button
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.work.WorkInfo
++import io.github.pagmovel.iptvplayer.carga.EtapaCarga
++import io.github.pagmovel.iptvplayer.dados.Conta
++import io.github.pagmovel.iptvplayer.dados.Contagem
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++
++/**
++ * Tela de resumo (brief T11) — tela inicial provisória, que o Plano 3 troca pela vitrine.
++ * Sem conta ativa, [onPrecisaDeConta] leva direto para o formulário de cadastro.
++ */
++@Composable
++fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGerenciarContas: () -> Unit) {
++    var conta by remember { mutableStateOf<Conta?>(null) }
++    var contagem by remember { mutableStateOf(Contagem(0, 0, 0, 0)) }
++    var carregando by remember { mutableStateOf(true) }
++
++    LaunchedEffect(Unit) {
++        val ativa = viewModel.contaAtiva()
++        if (ativa == null) {
++            onPrecisaDeConta()
++            return@LaunchedEffect
++        }
++        conta = ativa
++        contagem = viewModel.contagem(ativa.id)
++        carregando = false
++        if (viewModel.precisaAtualizar(ativa)) viewModel.atualizarAgora(ativa.id)
++    }
++
++    val contaAtual = conta
++    if (contaAtual == null) {
++        if (carregando) {
++            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
++        }
++        return
++    }
++
++    val info by viewModel.progresso(contaAtual.id).collectAsState(initial = null)
++
++    LaunchedEffect(info?.state) {
++        if (info?.state == WorkInfo.State.SUCCEEDED) {
++            contagem = viewModel.contagem(contaAtual.id)
++            conta = viewModel.contaAtiva()
++        }
++    }
++
++    Column(Modifier.fillMaxSize().padding(16.dp)) {
++        Text(contaAtual.nome, style = MaterialTheme.typography.headlineSmall)
++        Spacer(Modifier.height(16.dp))
++        Text("Canais: ${contagem.canais}")
++        Text("Filmes: ${contagem.filmes}")
++        Text("Séries: ${contagem.series}")
++        Text("Programas: ${contagem.programas}")
++        Spacer(Modifier.height(16.dp))
++        EstadoCarga(info)
++        Spacer(Modifier.height(8.dp))
++        Text("Última carga: " + formatarData(contaAtual.ultimaCargaEm))
++        Spacer(Modifier.height(16.dp))
++        Button(onClick = { viewModel.atualizarAgora(contaAtual.id) }) { Text("Atualizar agora") }
++        Spacer(Modifier.height(8.dp))
++        TextButton(onClick = onGerenciarContas) { Text("Gerenciar contas") }
++    }
++}
++
++@Composable
++private fun EstadoCarga(info: WorkInfo?) {
++    val texto = when (info?.state) {
++        WorkInfo.State.RUNNING -> "Atualizando: " + nomeEtapa(info.progress.getString("etapa"))
++        WorkInfo.State.ENQUEUED -> "Aguardando conexão com a internet."
++        WorkInfo.State.FAILED -> info.outputData.getString("mensagem") ?: "Falha ao atualizar."
++        else -> null
++    }
++    texto?.let { Text(it) }
++}
++
++private fun nomeEtapa(nome: String?): String = when (nome) {
++    EtapaCarga.AUTENTICANDO.name -> "autenticando"
++    EtapaCarga.CATEGORIAS.name -> "categorias"
++    EtapaCarga.CANAIS.name -> "canais"
++    EtapaCarga.FILMES.name -> "filmes"
++    EtapaCarga.SERIES.name -> "séries"
++    EtapaCarga.PROGRAMACAO.name -> "programação"
++    EtapaCarga.CONCLUIDA.name -> "concluída"
++    else -> "…"
++}
++
++private fun formatarData(epochMs: Long?): String =
++    if (epochMs == null) {
++        "nunca"
++    } else {
++        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date(epochMs))
++    }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoViewModel.kt
+new file mode 100644
+index 0000000..6a8cfbf
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoViewModel.kt
+@@ -0,0 +1,34 @@
++package io.github.pagmovel.iptvplayer.ui.resumo
++import androidx.work.WorkInfo
++import androidx.work.WorkManager
++import io.github.pagmovel.iptvplayer.carga.CargaWorker
++import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.dados.Conta
++import io.github.pagmovel.iptvplayer.dados.Contagem
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.map
++
++/**
++ * Estado e ações da tela de resumo — mesma observação de
++ * [io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel] sobre não ser um
++ * `androidx.lifecycle.ViewModel`.
++ */
++class ResumoViewModel(
++    private val banco: BancoApp,
++    private val repositorio: ContasRepositorio,
++    private val workManager: WorkManager,
++) {
++    suspend fun contaAtiva(): Conta? = banco.contaDao().ativa()
++
++    suspend fun contagem(contaId: Long): Contagem = banco.catalogoDao().contagem(contaId)
++
++    suspend fun precisaAtualizar(conta: Conta): Boolean =
++        repositorio.precisaAtualizar(conta, System.currentTimeMillis())
++
++    fun atualizarAgora(contaId: Long) = CargaWorker.enfileirar(workManager, contaId)
++
++    /** Último (e único — trabalho único por conta) [WorkInfo] da carga dessa conta, se houver. */
++    fun progresso(contaId: Long): Flow<WorkInfo?> =
++        workManager.getWorkInfosForUniqueWorkFlow(CargaWorker.nomeTrabalho(contaId)).map { it.firstOrNull() }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt
+index 36f0042..f3c5939 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/xtream/FalhaXtream.kt
+@@ -23,3 +23,15 @@ sealed class FalhaXtream : Exception() {
+      */
+     data class RespostaInvalida(val detalhe: String) : FalhaXtream()
+ }
++
++/**
++ * Mensagem em pt-BR para mostrar ao usuário (decisão do plano, T11) — usada tanto pelo
++ * [io.github.pagmovel.iptvplayer.carga.CargaWorker] quanto pela tela de contas, para a
++ * tradução não ficar duplicada nos dois lugares.
++ */
++fun FalhaXtream.mensagemUsuario(): String = when (this) {
++    is FalhaXtream.CredenciaisInvalidas -> "Usuário ou senha incorretos"
++    is FalhaXtream.ContaInativa -> "Conta do provedor inativa ou vencida ($status)"
++    is FalhaXtream.ServidorIndisponivel -> "Servidor não respondeu. Tente outro endereço do seu provedor."
++    is FalhaXtream.RespostaInvalida -> "O servidor respondeu algo inesperado."
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaWorkerTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaWorkerTest.kt
+new file mode 100644
+index 0000000..76a3f70
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/carga/CargaWorkerTest.kt
+@@ -0,0 +1,118 @@
++package io.github.pagmovel.iptvplayer.carga
++import android.content.Context
++import androidx.room.Room
++import androidx.work.ListenableWorker
++import androidx.work.WorkerFactory
++import androidx.work.WorkerParameters
++import androidx.work.testing.TestListenableWorkerBuilder
++import androidx.work.workDataOf
++import io.github.pagmovel.iptvplayer.conta.Cofre
++import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
++import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.runTest
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++/**
++ * Cofre falso em memória — mesmo motivo de [io.github.pagmovel.iptvplayer.conta.ContasRepositorioTest]:
++ * Robolectric não emula o `AndroidKeyStore`.
++ */
++private class CofreFalso : Cofre {
++    override fun cifrar(texto: String): ByteArray = texto.toByteArray(Charsets.UTF_8)
++    override fun decifrar(dados: ByteArray): String = dados.toString(Charsets.UTF_8)
++}
++
++@RunWith(RobolectricTestRunner::class)
++class CargaWorkerTest {
++    private lateinit var servidor: MockWebServer
++    private lateinit var banco: BancoApp
++    private lateinit var repo: ContasRepositorio
++    private var contaId: Long = -1
++
++    @Before
++    fun montar() = runTest {
++        servidor = MockWebServer()
++        servidor.start()
++        banco = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java)
++            .allowMainThreadQueries()
++            .build()
++        repo = ContasRepositorio(banco, CofreFalso()) { cred -> XtreamApi(OkHttpClient(), cred) }
++        servidor.enqueue(auth())
++        val cred = CredenciaisXtream(servidor.url("/").toString().removeSuffix("/"), "u", "p")
++        contaId = repo.testarESalvar("Conta A", cred).getOrThrow().id
++    }
++
++    @After
++    fun desmontar() {
++        banco.close()
++        servidor.shutdown()
++    }
++
++    private fun auth() = MockResponse().setBody(
++        """{"user_info":{"auth":1,"status":"Active","exp_date":"1800000000","max_connections":"1"}}""",
++    )
++
++    private fun authInvalida() = MockResponse().setBody("""{"user_info":{"auth":0}}""")
++
++    private fun lista() = MockResponse().setBody("[]")
++
++    /** Constrói o worker com as dependências de teste direto, via uma WorkerFactory própria —
++     * bypassa o [io.github.pagmovel.iptvplayer.AppIptv] real (ver comentário de [CargaWorker]). */
++    private fun criarWorker(): CargaWorker {
++        val fabrica = object : WorkerFactory() {
++            override fun createWorker(
++                appContext: Context,
++                workerClassName: String,
++                workerParameters: WorkerParameters,
++            ): ListenableWorker = CargaWorker(appContext, workerParameters, banco, repo) { cred ->
++                XtreamApi(OkHttpClient(), cred)
++            }
++        }
++        return TestListenableWorkerBuilder<CargaWorker>(
++            RuntimeEnvironment.getApplication(),
++            inputData = workDataOf("contaId" to contaId),
++        ).setWorkerFactory(fabrica).build()
++    }
++
++    @Test
++    fun `worker grava o catalogo e marca a carga`() = runTest {
++        servidor.enqueue(auth()) // autenticar (CargaCatalogo)
++        servidor.enqueue(lista()) // get_live_categories
++        servidor.enqueue(lista()) // get_vod_categories
++        servidor.enqueue(lista()) // get_series_categories
++        servidor.enqueue(lista()) // get_live_streams
++        servidor.enqueue(lista()) // get_vod_streams
++        servidor.enqueue(lista()) // get_series
++        servidor.enqueue(MockResponse().setBody("<tv></tv>")) // xmltv.php
++
++        val resultado = criarWorker().doWork()
++
++        assertTrue(resultado is ListenableWorker.Result.Success)
++        val conta = banco.contaDao().listar().first().single { it.id == contaId }
++        assertNotNull(conta.ultimaCargaEm)
++    }
++
++    @Test
++    fun `worker traduz falha em mensagem`() = runTest {
++        servidor.enqueue(authInvalida()) // autenticar (CargaCatalogo) falha: auth = 0
++
++        val resultado = criarWorker().doWork()
++
++        assertTrue(resultado is ListenableWorker.Result.Failure)
++        val mensagem = (resultado as ListenableWorker.Result.Failure).outputData.getString("mensagem")
++        assertEquals("Usuário ou senha incorretos", mensagem)
++    }
++}
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index c67f6ff..0a776ce 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -13,6 +13,9 @@ activityCompose = "1.13.0"
+ lifecycleRuntimeKtx = "2.11.0"
+ room = "2.8.5"
+ workRuntime = "2.12.0"
++# Versão própria (não reaproveita workRuntime) porque é uma dependência nova, separada —
++# mesmo valor 2.12.0 por ser a mesma linha do work-runtime já declarado.
++workTesting = "2.12.0"
+ okhttp = "5.5.1"
+ kotlinxSerializationJson = "1.12.0"
+ kotlinxCoroutinesTest = "1.11.0"
+@@ -40,6 +43,7 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
+ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
++androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "workTesting" }
+ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+ okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
