@@ -1,0 +1,327 @@
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/conta/Cofre.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/Cofre.kt
+new file mode 100644
+index 0000000..970f87a
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/Cofre.kt
+@@ -0,0 +1,56 @@
++package io.github.pagmovel.iptvplayer.conta
++import android.security.keystore.KeyGenParameterSpec
++import android.security.keystore.KeyProperties
++import java.security.KeyStore
++import javax.crypto.Cipher
++import javax.crypto.KeyGenerator
++import javax.crypto.SecretKey
++import javax.crypto.spec.GCMParameterSpec
++/**
++ * Cifra/decifra a senha da conta Xtream antes de gravar no banco — a senha nunca vai em
++ * texto puro para o `Conta.senhaCifrada` (ver T10). Interface só por causa do teste: o
++ * Robolectric não emula o `AndroidKeyStore`, então [ContasRepositorioTest] usa um Cofre
++ * falso em memória; [CofreKeystore] é a segunda implementação, a real.
++ */
++interface Cofre {
++    fun cifrar(texto: String): ByteArray
++    fun decifrar(dados: ByteArray): String
++}
++/**
++ * Implementação real: AES/GCM/NoPadding com chave não exportável no `AndroidKeyStore`. O IV
++ * (12 bytes, tamanho padrão do GCM) vai prefixado ao resultado porque tem que ser único a
++ * cada cifragem e `decifrar` precisa dele de volta — guardar numa coluna separada seria mais
++ * uma coisa para sincronizar com o mesmo propósito.
++ */
++class CofreKeystore : Cofre {
++    override fun cifrar(texto: String): ByteArray {
++        val cipher = Cipher.getInstance(TRANSFORMACAO)
++        cipher.init(Cipher.ENCRYPT_MODE, chave())
++        return cipher.iv + cipher.doFinal(texto.toByteArray(Charsets.UTF_8))
++    }
++    override fun decifrar(dados: ByteArray): String {
++        val iv = dados.copyOfRange(0, TAMANHO_IV)
++        val cifrado = dados.copyOfRange(TAMANHO_IV, dados.size)
++        val cipher = Cipher.getInstance(TRANSFORMACAO)
++        cipher.init(Cipher.DECRYPT_MODE, chave(), GCMParameterSpec(TAMANHO_TAG_BITS, iv))
++        return cipher.doFinal(cifrado).toString(Charsets.UTF_8)
++    }
++    private fun chave(): SecretKey {
++        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
++        (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
++        val gerador = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
++        gerador.init(
++            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
++                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
++                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
++                .build(),
++        )
++        return gerador.generateKey()
++    }
++    private companion object {
++        const val ALIAS = "iptv-player-free-senhas"
++        const val TRANSFORMACAO = "AES/GCM/NoPadding"
++        const val TAMANHO_IV = 12
++        const val TAMANHO_TAG_BITS = 128
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContaDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContaDao.kt
+new file mode 100644
+index 0000000..d475ffc
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContaDao.kt
+@@ -0,0 +1,27 @@
++package io.github.pagmovel.iptvplayer.conta
++import androidx.room.Dao
++import androidx.room.Insert
++import androidx.room.Query
++import androidx.room.Update
++import io.github.pagmovel.iptvplayer.dados.Conta
++import kotlinx.coroutines.flow.Flow
++/**
++ * Acesso à tabela de contas Xtream cadastradas no app (ver [Conta]). `listar()` devolve um
++ * [Flow] para a tela de contas se atualizar sozinha quando alguma conta é inserida,
++ * atualizada ou apagada — sem precisar que quem chama recarregue manualmente.
++ */
++@Dao
++abstract class ContaDao {
++    @Insert
++    abstract suspend fun inserir(conta: Conta): Long
++    @Update
++    abstract suspend fun atualizar(conta: Conta)
++    @Query("DELETE FROM Conta WHERE id = :id")
++    abstract suspend fun apagar(id: Long)
++    @Query("SELECT * FROM Conta")
++    abstract fun listar(): Flow<List<Conta>>
++    @Query("SELECT * FROM Conta WHERE ativa = 1 LIMIT 1")
++    abstract suspend fun ativa(): Conta?
++    @Query("UPDATE Conta SET ultimaCargaEm = :quando WHERE id = :id")
++    abstract suspend fun marcarCarga(id: Long, quando: Long)
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt
+new file mode 100644
+index 0000000..689be58
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorio.kt
+@@ -0,0 +1,64 @@
++package io.github.pagmovel.iptvplayer.conta
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.dados.Conta
++import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import kotlinx.coroutines.flow.first
++/** Conta não fica sem atualizar o catálogo por mais de 12h (ver design, §3.1). */
++private const val INTERVALO_CARGA_MS = 12 * 60 * 60 * 1000L
++/**
++ * Cadastro e consulta das contas Xtream do app: testa a credencial antes de salvar, cifra a
++ * senha com [cofre] e decide qual conta está ativa. `criarApi` existe para o teste poder
++ * trocar [XtreamApi] por uma instância apontando para um `MockWebServer`, sem o repositório
++ * precisar saber disso.
++ */
++class ContasRepositorio(
++    private val banco: BancoApp,
++    private val cofre: Cofre,
++    private val criarApi: (CredenciaisXtream) -> XtreamApi,
++) {
++    /** Só salva se [CredenciaisXtream] autenticar de verdade. A primeira conta cadastrada fica ativa. */
++    suspend fun testarESalvar(nome: String, cred: CredenciaisXtream): Result<Conta> =
++        try {
++            criarApi(cred).autenticar()
++            val primeira = banco.contaDao().listar().first().isEmpty()
++            val conta = Conta(
++                nome = nome,
++                servidor = cred.servidor,
++                usuario = cred.usuario,
++                senhaCifrada = cofre.cifrar(cred.senha),
++                ativa = primeira,
++                ultimaCargaEm = null,
++            )
++            val id = banco.contaDao().inserir(conta)
++            Result.success(conta.copy(id = id))
++        } catch (e: FalhaXtream) {
++            Result.failure(e)
++        }
++    /**
++     * Deixa exatamente a conta [id] ativa, desativando as demais.
++     *
++     * ponytail: lê e regrava todas as contas (uma a uma); aceitável porque o app guarda
++     * poucas contas (cadastro manual, uma por vez). Se isso crescer, trocar por duas queries
++     * `UPDATE` diretas no [ContaDao] (zera todas, ativa uma).
++     */
++    suspend fun ativar(id: Long) {
++        banco.contaDao().listar().first().forEach { conta ->
++            banco.contaDao().atualizar(conta.copy(ativa = conta.id == id))
++        }
++    }
++    /** Apaga a conta e todo o catálogo/programação dela. */
++    suspend fun apagar(id: Long) {
++        banco.catalogoDao().apagarCatalogo(id)
++        banco.catalogoDao().apagarProgramacao(id)
++        banco.contaDao().apagar(id)
++    }
++    /** Decifra a senha salva para montar as credenciais usadas numa nova carga/autenticação. */
++    suspend fun credenciais(conta: Conta): CredenciaisXtream =
++        CredenciaisXtream(conta.servidor, conta.usuario, cofre.decifrar(conta.senhaCifrada))
++    /** Verdadeiro se a conta nunca carregou ou se a última carga passou de 12h. */
++    suspend fun precisaAtualizar(conta: Conta, agoraMs: Long): Boolean {
++        val ultima = conta.ultimaCargaEm ?: return true
++        return agoraMs - ultima > INTERVALO_CARGA_MS
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+index 2b7d980..06561c5 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+@@ -1,12 +1,8 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+-import androidx.room.Dao
+ import androidx.room.Database
+ import androidx.room.RoomDatabase
+-
+-/** DAO de contas Xtream. Vazio por ora — a T10 preenche os métodos de cadastro/consulta. */
+-@Dao
+-abstract class ContaDao
++import io.github.pagmovel.iptvplayer.conta.ContaDao
+ 
+ /**
+  * Banco local do app: catálogo (categorias, canais, filmes, séries, programação) e contas
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+index 9cded7f..d0d2dcc 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+@@ -69,7 +69,7 @@ data class Programa(
+     val descricao: String?,
+ )
+ 
+-/** Conta Xtream cadastrada no app. Preenchida pela T10 (ContaDao). */
++/** Conta Xtream cadastrada no app. `senhaCifrada` nunca guarda texto puro — ver [io.github.pagmovel.iptvplayer.conta.Cofre]. */
+ @Entity
+ data class Conta(
+     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorioTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorioTest.kt
+new file mode 100644
+index 0000000..530151a
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/conta/ContasRepositorioTest.kt
+@@ -0,0 +1,125 @@
++package io.github.pagmovel.iptvplayer.conta
++import androidx.room.Room
++import io.github.pagmovel.iptvplayer.dados.BancoApp
++import io.github.pagmovel.iptvplayer.dados.Canal
++import io.github.pagmovel.iptvplayer.dados.Conta
++import io.github.pagmovel.iptvplayer.xtream.XtreamApi
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.runTest
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++/**
++ * Cofre falso em memória: XOR reversível por byte, só para o teste comprovar que a senha
++ * salva não é texto puro (Robolectric não emula o `AndroidKeyStore`, ver [CofreKeystore] —
++ * é por isso que [Cofre] é uma interface). Não é prefixo/sufixo porque isso deixaria a senha
++ * original como substring do resultado, o que o teste 1 tem que reprovar de verdade.
++ */
++private class CofreFalso : Cofre {
++    override fun cifrar(texto: String): ByteArray =
++        texto.toByteArray(Charsets.UTF_8).map { (it.toInt() xor 0xFF).toByte() }.toByteArray()
++    override fun decifrar(dados: ByteArray): String =
++        dados.map { (it.toInt() xor 0xFF).toByte() }.toByteArray().toString(Charsets.UTF_8)
++}
++@RunWith(RobolectricTestRunner::class)
++class ContasRepositorioTest {
++    private lateinit var servidor: MockWebServer
++    private lateinit var banco: BancoApp
++    private lateinit var repo: ContasRepositorio
++    @Before
++    fun montar() {
++        servidor = MockWebServer()
++        servidor.start()
++        banco = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java)
++            .allowMainThreadQueries()
++            .build()
++        repo = ContasRepositorio(banco, CofreFalso()) { cred -> XtreamApi(OkHttpClient(), cred) }
++    }
++    @After
++    fun desmontar() {
++        banco.close()
++        servidor.shutdown()
++    }
++    private fun credenciais(usuario: String = "u", senha: String = "s3nh4") =
++        CredenciaisXtream(servidor.url("/").toString().removeSuffix("/"), usuario, senha)
++    private fun auth() = MockResponse().setBody(
++        """{"user_info":{"auth":1,"status":"Active","exp_date":"1800000000","max_connections":"1"}}""",
++    )
++    private fun authInvalida() = MockResponse().setBody("""{"user_info":{"auth":0}}""")
++    private fun contaSolta(ultimaCargaEm: Long?) = Conta(
++        id = 1,
++        nome = "x",
++        servidor = "x",
++        usuario = "x",
++        senhaCifrada = ByteArray(0),
++        ativa = false,
++        ultimaCargaEm = ultimaCargaEm,
++    )
++    @Test
++    fun `senha nunca e gravada em texto puro`() = runTest {
++        servidor.enqueue(auth())
++        val conta = repo.testarESalvar("Conta A", credenciais(senha = "s3nh4")).getOrThrow()
++        // ISO-8859-1 mapeia cada byte a um char sem perdas (ao contrário de UTF-8, que pode
++        // substituir byte inválido) — é o jeito certo de procurar a senha como substring dos
++        // bytes crus, não do texto decodificado.
++        val bytesComoTexto = String(conta.senhaCifrada, Charsets.ISO_8859_1)
++        assertFalse(bytesComoTexto.contains("s3nh4"))
++    }
++    @Test
++    fun `credencial invalida nao salva conta`() = runTest {
++        servidor.enqueue(authInvalida())
++        val resultado = repo.testarESalvar("Conta A", credenciais())
++        assertTrue(resultado.isFailure)
++        assertTrue(banco.contaDao().listar().first().isEmpty())
++    }
++    @Test
++    fun `primeira conta fica ativa e ativar troca`() = runTest {
++        servidor.enqueue(auth())
++        val a = repo.testarESalvar("Conta A", credenciais(usuario = "a")).getOrThrow()
++        servidor.enqueue(auth())
++        val b = repo.testarESalvar("Conta B", credenciais(usuario = "b")).getOrThrow()
++        val depoisDeCriar = banco.contaDao().listar().first()
++        assertEquals(a.id, depoisDeCriar.single { it.ativa }.id)
++        repo.ativar(b.id)
++        val depoisDeAtivar = banco.contaDao().listar().first()
++        assertEquals(b.id, depoisDeAtivar.single { it.ativa }.id)
++    }
++    @Test
++    fun `apagar conta apaga o catalogo dela`() = runTest {
++        servidor.enqueue(auth())
++        val conta = repo.testarESalvar("Conta A", credenciais()).getOrThrow()
++        banco.catalogoDao().inserirCanais(
++            listOf(
++                Canal(
++                    contaId = conta.id,
++                    streamId = 1,
++                    nome = "Canal 1",
++                    categoriaId = null,
++                    icone = null,
++                    epgId = null,
++                    numero = null,
++                ),
++            ),
++        )
++        repo.apagar(conta.id)
++        assertEquals(0, banco.catalogoDao().contagem(conta.id).canais)
++        assertTrue(banco.contaDao().listar().first().isEmpty())
++    }
++    @Test
++    fun `precisa atualizar depois de 12 horas`() = runTest {
++        assertTrue(repo.precisaAtualizar(contaSolta(ultimaCargaEm = null), agoraMs = 1_000_000L))
++        val onzeH59 = (11 * 60 + 59) * 60 * 1000L
++        assertFalse(repo.precisaAtualizar(contaSolta(ultimaCargaEm = 0L), agoraMs = onzeH59))
++        val dozeH01 = (12 * 60 + 1) * 60 * 1000L
++        assertTrue(repo.precisaAtualizar(contaSolta(ultimaCargaEm = 0L), agoraMs = dozeH01))
++    }
++}

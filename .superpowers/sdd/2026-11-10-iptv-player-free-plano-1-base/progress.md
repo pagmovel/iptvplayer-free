@@ -294,3 +294,42 @@ BASE antes da T9: `07d6f3d`.
   (`Contagem` de T7 não tem esse campo) — deferred, fora do escopo do brief.
 - Task 9: complete (commits 07d6f3d..11ad7b0: `ddbe007` infra do mirror, `8729237` código,
   `df240a4` docs, `11ad7b0` fix do minor; review clean, 1 minor corrigido, 1 minor deferred).
+BASE antes da T10: `abdc896`.
+- Task 10: despachado (implementador, modelo sonnet). Brief: `task-10-brief.md`. Relatório
+  esperado em `task-10-report.md`. Instruído sobre a pegadinha do `--local` no git config
+  (T5), a convenção de autoria (`marcos.ronaldo@gmail.com`), a lacuna do plano (T10 também
+  modifica `dados/BancoApp.kt` para adicionar `contaDao()`), e que o Robolectric já está
+  desbloqueado nesta sessão (mirror + Docker Desktop rodando).
+- Task 10: implementado (commit `39a9207`), status DONE segundo o implementador — 5/5
+  testes, autoria correta. Arquivos: `conta/Cofre.kt` (interface + `CofreKeystore` real),
+  `conta/ContaDao.kt` (DAO movido de dentro de `BancoApp.kt` para arquivo próprio, 6
+  métodos), `conta/ContasRepositorio.kt` (`testarESalvar`/`ativar`/`apagar`/
+  `credenciais`/`precisaAtualizar`), `conta/ContasRepositorioTest.kt`. Editados
+  `dados/BancoApp.kt` (removido o `ContaDao` vazio da T7) e `dados/Entidades.kt` (comentário).
+- `Ruling:` **não aceitei o relatório de olhos fechados.** O XML do JUnit de
+  `ContasRepositorioTest` não existia mais no diretório de resultados (só sobrou o de
+  `CargaCatalogoTest`/`CatalogoDaoTest`, de uma rodada posterior do próprio implementador que
+  limpou a pasta — o `Test` task do Gradle limpa todo `test-results` a cada execução,
+  independente do filtro `--tests`). Rodei de novo, de forma independente: **falhou**, não
+  com o 429 de `nativeruntime-dist-compat` (já corrigido), mas com outro 429 — em
+  `repo1.maven.org`, para `org.robolectric:android-all-instrumented:6.0.1_r3-robolectric-r1-i7`
+  — exatamente o achado de infraestrutura que o implementador relatou (mas a causa raiz real
+  não é "rodar mais de uma classe na mesma chamada": é que o `MavenArtifactFetcher` do
+  Robolectric baixa esse jar por conta própria, direto de `repo1.maven.org`, **sem passar pela
+  resolução de dependências do Gradle** — por isso o `exclusiveContent` da T9 (que atua em
+  `settings.gradle.kts`) não alcança esse download.
+- Pesquisei a documentação oficial do Robolectric
+  (`https://robolectric.org/blog/2023/11/11/improving-android-all-downloading`, indexada via
+  `ctx_index`/`ctx_search`): existe mecanismo oficial para isso —
+  `robolectric.dependency.repo.url`/`robolectric.dependency.repo.id` (system properties que o
+  `MavenArtifactFetcher` lê), sem precisar de usuário/senha para espelho público. Confirmei
+  com `curl -I` que tanto `maven.aliyun.com` quanto o espelho do Google servem esse artefato
+  específico com 200. Configurado em `app/build.gradle.kts`
+  (`testOptions.unitTests.all { it.systemProperty(...) }`, commit `cef9d77`), apontando pro
+  mesmo espelho do Google já usado na T9.
+- **Verificado de fato, não suposto**: rodei `ContasRepositorioTest` isolado (5/5, XML com
+  timestamp do próprio run) e depois **a suíte completa do projeto sem filtro** (8 classes,
+  41 testes, 0 falhas) — o cenário exato que o implementador relatou como quebrado antes
+  agora passa de ponta a ponta. Fica resolvido para a T11 também.
+- Task 10: pacote de revisão gerado (`review-abdc896..39a9207.diff`, só o diff do código da
+  T10). Revisor despachado (modelo sonnet, agente em segundo plano).
