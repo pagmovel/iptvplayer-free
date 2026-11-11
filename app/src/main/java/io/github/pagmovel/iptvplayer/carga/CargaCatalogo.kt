@@ -77,6 +77,9 @@ class CargaCatalogo(
             // quem grava é o loop abaixo, de volta no escopo suspend desta transação. Evita
             // depender de como o Room liga uma chamada suspend feita por dentro de uma ponte
             // bloqueante (ex.: runBlocking) à conexão da transação em andamento.
+            // ponytail: lotes da janela inteira acumulados em memória antes de gravar; se a
+            // janela crescer (ex. 30 dias) e isso pesar, trocar por uma fila/canal que empurra
+            // cada lote para uma corrotina gravadora.
             val lotes = mutableListOf<List<Programa>>()
             api.abrirXmltv { entrada -> lerXmltv(entrada, contaId, janela) { lote -> lotes += lote } }
             for (lote in lotes) dao.inserirProgramas(lote)
