@@ -3,6 +3,7 @@ import io.github.pagmovel.iptvplayer.dados.BancoApp
 import io.github.pagmovel.iptvplayer.dados.Conta
 import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
 import io.github.pagmovel.iptvplayer.xtream.XtreamApi
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.first
 /** Conta não fica sem atualizar o catálogo por mais de 12h (ver design, §3.1). */
 private const val INTERVALO_CARGA_MS = 12 * 60 * 60 * 1000L
@@ -42,13 +43,13 @@ class ContasRepositorio(
      * poucas contas (cadastro manual, uma por vez). Se isso crescer, trocar por duas queries
      * `UPDATE` diretas no [ContaDao] (zera todas, ativa uma).
      */
-    suspend fun ativar(id: Long) {
+    suspend fun ativar(id: Long) = banco.withTransaction {
         banco.contaDao().listar().first().forEach { conta ->
             banco.contaDao().atualizar(conta.copy(ativa = conta.id == id))
         }
     }
     /** Apaga a conta e todo o catálogo/programação dela. */
-    suspend fun apagar(id: Long) {
+    suspend fun apagar(id: Long) = banco.withTransaction {
         banco.catalogoDao().apagarCatalogo(id)
         banco.catalogoDao().apagarProgramacao(id)
         banco.contaDao().apagar(id)
