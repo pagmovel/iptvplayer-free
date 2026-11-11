@@ -283,3 +283,14 @@ BASE antes da T9: `07d6f3d`.
   instruído a confirmar por fora a atomicidade das duas transações, a ordem dos `progresso`,
   os 4 cenários de teste e a ausência de push/tag — sem precisar rodar a suíte de novo (já
   verificada acima).
+- Task 9: revisão — ✅ spec conforme (assinaturas, ordem dos `progresso`, autenticação antes
+  de qualquer escrita, atomicidade das duas transações confirmada lendo o código, não o
+  relatório). Qualidade **Aprovado**, 0 crítico, 0 importante. Revisor confirmou por fora
+  (`git log`, `@{u}`, `git tag -l`) que não há push nem tag. 2 minor: (1) comentário
+  `ponytail:` formal ausente no buffer em memória da programação (a decisão já estava em
+  prosa no código e no relatório, só faltava a tag nomeando teto/gatilho) — **corrigido**
+  (commit `11ad7b0`, 4/4 testes re-verificados pelo `./scripts/gradle.ps1` depois do ajuste,
+  XML confirmado com timestamp do próprio run); (2) categorias sem cobertura de teste
+  (`Contagem` de T7 não tem esse campo) — deferred, fora do escopo do brief.
+- Task 9: complete (commits 07d6f3d..11ad7b0: `ddbe007` infra do mirror, `8729237` código,
+  `df240a4` docs, `11ad7b0` fix do minor; review clean, 1 minor corrigido, 1 minor deferred).
