@@ -396,3 +396,36 @@ BASE antes da T11: `b97b595`.
 - Task 11: pacote de revisão gerado (`review-cd904f2..3d50dc2.diff`, só os 2 commits da
   T11). Revisor despachado (modelo sonnet, agente em segundo plano), informado das
   verificações já feitas para não repetir a suíte.
+- Task 11: revisão — **1 Importante, 0 crítico.** "Sem conta, abre direto o formulário"
+  (texto literal do brief e do próprio comentário de `ResumoTela.kt`) não estava
+  implementado: `onPrecisaDeConta` e `onGerenciarContas` em `Navegacao.kt` apontavam para o
+  mesmo lugar (`Tela.CONTAS`), sem nenhuma distinção — quem abria o app sem conta caía na
+  lista vazia, precisando de um toque extra no "+". Resto do checklist confere: construtor
+  de 2 parâmetros do `CargaWorker` resolvido por reflexão pelo `WorkerFactory` padrão
+  (confirmado no código-fonte real de `work-runtime:2.12.0`), `CoroutineWorker` roda em
+  `Dispatchers.Default` por padrão (confirmado no doc-comment real da classe, valida o
+  `ponytail:` do `runBlocking`), os 2 testes do worker literais e corretos,
+  `ACCESS_NETWORK_STATE` via merge do manifest, as 4 pegadinhas do `SKILL.md` conferem
+  contra os relatórios de T5/T6 e o design §3.1 (não inventadas), telas/tema conforme o
+  design, YAGNI respeitado, sem push/tag. 2 minor deferred: mensagens hardcoded em
+  `CargaWorker.doWork()` para conta ausente/inválida (não são `FalhaXtream`, não precisam de
+  tradução central); `ResumoViewModel` perde o cache ao remontar a tela (inofensivo hoje,
+  dedupe via `ExistingWorkPolicy.KEEP`).
+- **Corrigido o Importante**: `ContasTela` ganhou o parâmetro `abrirFormularioInicialmente`
+  e `Navegacao.kt` passou a rastrear a razão da navegação (`forcarFormulario`) em vez de
+  tratar os dois callbacks como iguais (commit `6df4753`). Re-verificado de fato: 43/43
+  testes, `assembleDebug` OK.
+- Task 11 (passos 1–6 e 9): **complete** (commits cd904f2..6df4753: `90db6eb` código,
+  `3d50dc2` skill, `0fa7fc5` docs, `6df4753` fix do Importante; review com 1 achado real
+  corrigido, 2 minor deferred).
+- **Gap real encontrado ao atualizar a tabela de acompanhamento do plano**: T2 (workflow do
+  GitHub Actions) e T3 (chave de assinatura, Secrets, primeira Release) continuam
+  `pendente` — nunca foram executadas nesta sessão. Não há `.github/workflows/`, nenhuma
+  tag (`git tag -l` vazio), nenhum Secret configurado. Isso já tinha sido decidido antes da
+  pausa (ver `Ruling` na seção "Setup" deste ledger): T3 e os passos 7/8 da T11 são feitos
+  pelo controlador diretamente, nunca por subagente, por envolver chave de assinatura real,
+  interação com o dono e ações públicas no GitHub. **Meta do Plano 1 ("build, assinatura,
+  Releases, contas, carga do catálogo e da programação") não está completa sem T2/T3** —
+  parei para perguntar ao dono antes de avançar nisso ou no push/tag da T11, em vez de
+  supor que já foi feito por outro caminho (o passo 8 da T11 menciona "atualizando por cima
+  da v0.0.2", o que eu não posso confirmar nem negar sem perguntar).

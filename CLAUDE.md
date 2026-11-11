@@ -9,7 +9,11 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 ## Onde paramos (2026-11-11)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Concluídas,
-  testadas e revisadas: T1, T4, T5, T6, T7, T8, T9, T10** (9 de 11). Falta só T11.
+  testadas e revisadas: T1, T4, T5, T6, T7, T8, T9, T10, T11** (passos 1–6 e 9; 9 de 11
+  tarefas). **T2 e T3 continuam `pendente`** — nunca foram executadas nesta sessão (sem
+  `.github/workflows/`, sem tag, sem Secrets). Isso é um gap real da meta do Plano 1
+  ("build, assinatura, Releases..."), não só os passos 7/8 da T11 (push+tag v0.1.0,
+  validação no celular) — ver ledger do SDD para o `Ruling` sobre quem executa T2/T3.
 - O bloqueio de HTTP 429 do Maven Central no artefato do Robolectric
   (`org.robolectric:nativeruntime-dist-compat:1.0.19`) foi contornado em `settings.gradle.kts`
   com `exclusiveContent { forRepository { maven(espelho do Google) }; filter {
