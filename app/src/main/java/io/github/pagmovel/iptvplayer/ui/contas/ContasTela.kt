@@ -35,9 +35,13 @@ import kotlinx.coroutines.launch
  * editar servidor e apagar. Tela provisória — plano 2/3 pode trazer navegação própria.
  */
 @Composable
-fun ContasTela(viewModel: ContasViewModel, onVoltar: () -> Unit) {
+fun ContasTela(
+    viewModel: ContasViewModel,
+    onVoltar: () -> Unit,
+    abrirFormularioInicialmente: Boolean = false,
+) {
     val contas by viewModel.contas.collectAsState(initial = emptyList())
-    var mostrarFormulario by remember { mutableStateOf(false) }
+    var mostrarFormulario by remember { mutableStateOf(abrirFormularioInicialmente) }
     var contaEmEdicao by remember { mutableStateOf<Conta?>(null) }
     var contaParaApagar by remember { mutableStateOf<Conta?>(null) }
     val escopo = rememberCoroutineScope()

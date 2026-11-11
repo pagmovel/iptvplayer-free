@@ -22,16 +22,20 @@ private enum class Tela { RESUMO, CONTAS }
 @Composable
 fun Navegacao(app: AppIptv) {
     var tela by remember { mutableStateOf(Tela.RESUMO) }
+    // Distingue "sem conta, forçar o cadastro" (brief T11: abre direto o formulário) de
+    // "usuário escolheu gerenciar contas" (não abre o formulário sozinho).
+    var forcarFormulario by remember { mutableStateOf(false) }
     val workManager = remember { WorkManager.getInstance(app) }
     when (tela) {
         Tela.RESUMO -> ResumoTela(
             viewModel = remember { ResumoViewModel(app.banco, app.contasRepositorio, workManager) },
-            onPrecisaDeConta = { tela = Tela.CONTAS },
-            onGerenciarContas = { tela = Tela.CONTAS },
+            onPrecisaDeConta = { forcarFormulario = true; tela = Tela.CONTAS },
+            onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
         )
         Tela.CONTAS -> ContasTela(
             viewModel = remember { ContasViewModel(app.contasRepositorio) },
             onVoltar = { tela = Tela.RESUMO },
+            abrirFormularioInicialmente = forcarFormulario,
         )
     }
 }
