@@ -1,12 +1,8 @@
 package io.github.pagmovel.iptvplayer.dados
 
-import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.RoomDatabase
-
-/** DAO de contas Xtream. Vazio por ora — a T10 preenche os métodos de cadastro/consulta. */
-@Dao
-abstract class ContaDao
+import io.github.pagmovel.iptvplayer.conta.ContaDao
 
 /**
  * Banco local do app: catálogo (categorias, canais, filmes, séries, programação) e contas

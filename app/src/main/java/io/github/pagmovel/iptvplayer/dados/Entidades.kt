@@ -69,7 +69,7 @@ data class Programa(
     val descricao: String?,
 )
 
-/** Conta Xtream cadastrada no app. Preenchida pela T10 (ContaDao). */
+/** Conta Xtream cadastrada no app. `senhaCifrada` nunca guarda texto puro — ver [io.github.pagmovel.iptvplayer.conta.Cofre]. */
 @Entity
 data class Conta(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
