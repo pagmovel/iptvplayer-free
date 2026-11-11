@@ -46,7 +46,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | Fase | Tarefa | Estado |
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
-| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `pendente` |
+| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `pendente` (código escrito, verificação local não terminou — sem commit) |
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `testada` |

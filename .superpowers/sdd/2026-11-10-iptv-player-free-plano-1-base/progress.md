@@ -429,3 +429,28 @@ BASE antes da T11: `b97b595`.
   parei para perguntar ao dono antes de avançar nisso ou no push/tag da T11, em vez de
   supor que já foi feito por outro caminho (o passo 8 da T11 menciona "atualizando por cima
   da v0.0.2", o que eu não posso confirmar nem negar sem perguntar).
+- Dono respondeu: seguir o plano como escrito, eu mesmo (controlador) conduzo T2 e T3.
+BASE antes da T2: `ded65b4`.
+- T2: comecei a implementar (sem subagente, por ser mecânico e não envolver segredos) —
+  `app/build.gradle.kts` (`versionCode`/`versionName` de `GITHUB_RUN_NUMBER`/`VERSAO_APP`
+  com defaults; `signingConfigs.release` condicional à existência de `app/assinatura.jks`),
+  `.gitignore` (`*.jks`), `.github/workflows/build.yml` novo (job `testes` sempre, job
+  `release` só em tag `v*`). Confirmei antes de escrever o workflow que a imagem
+  `cimg/android:2026.10` **não tem `gh` instalado** (`docker run ... which gh` → not found),
+  então a etapa de `gh release create` roda fora do container, no runner `ubuntu-latest`
+  direto (que já vem com `gh`), e só a montagem do APK (`docker run ... gradlew
+  assembleRelease`) roda dentro do container.
+- **Pausado pelo dono ("parar e handoff") no meio da verificação local do passo 3**
+  (`./scripts/gradle.ps1 testDebugUnitTest assembleDebug assembleRelease`) — a variante
+  `assembleRelease` nunca tinha sido compilada neste projeto, e o build não tinha terminado
+  em 10 minutos (parou em `optimizeReleaseResources`) quando o timeout da ferramenta bateu.
+  Parei o container Docker (`docker stop`) sem saber se o build ia passar. **Nada da T2 foi
+  commitado** — regra do projeto (e já aplicada em T9/T11 nesta sessão) é não commitar sem
+  ver passar de verdade. Estado fica só no working tree: `.gitignore` e
+  `app/build.gradle.kts` modificados, `.github/workflows/build.yml` novo, todos sem commit.
+- **Próxima sessão**: rodar de novo a verificação (talvez precise de mais que 10 min na
+  primeira vez compilando `release`; considerar rodar em background). Só commitar a T2
+  depois de `BUILD SUCCESSFUL` confirmado. Depois: T3 (gerar a chave real com `keytool` em
+  `temp/assinatura/`, fora do git; guiar o dono no cadastro dos 4 Secrets pela interface web
+  do GitHub, já que não há `gh` CLI nesta máquina para fazer isso por linha de comando;
+  push e tag só com o "sim" específico na hora).
