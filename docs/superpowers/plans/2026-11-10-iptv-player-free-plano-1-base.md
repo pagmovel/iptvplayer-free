@@ -206,12 +206,12 @@ Tarefa com ações do dono. Cada push e cada tag precisam do "sim" dele na hora.
 - Criar (fora do git): `temp/assinatura/iptv-player-free.jks`,
   `temp/assinatura/valores-secrets.txt`
 
-- [ ] **Passo 1: Gerar a chave** com
+- [x] **Passo 1: Gerar a chave** com
   `& "C:\Program Files (x86)\Java\jre1.8.0_441\bin\keytool.exe" -genkeypair -v -keystore temp\assinatura\iptv-player-free.jks -alias iptv-player-free -keyalg RSA -keysize 4096 -validity 36500 -storetype PKCS12`.
   Gere senhas aleatórias fortes. Em PKCS12, a senha da chave é igual à do keystore. Grave em
   `valores-secrets.txt` os 4 nomes de Secret com os valores (keystore em base64 com
   `[Convert]::ToBase64String([IO.File]::ReadAllBytes(...))`).
-- [ ] **Passo 2: Conferir que nada vazou.** `git status --short` não mostra nada de `temp/`, e
+- [x] **Passo 2: Conferir que nada vazou.** `git status --short` não mostra nada de `temp/`, e
   `git check-ignore -v temp/assinatura/iptv-player-free.jks` mostra a regra `temp/`.
 - [ ] **Passo 3: Guiar o dono no cadastro dos Secrets:** repositório → *Settings* → *Secrets and
   variables* → *Actions* → *New repository secret*, uma vez para cada um dos 4 nomes. Peça a ele
