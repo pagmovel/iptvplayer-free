@@ -480,3 +480,59 @@ BASE antes da T2: `ded65b4`.
 - **Próximo**: T3 — gerar a chave real (`keytool`, fora do git), guiar o dono no cadastro dos
   4 Secrets pela interface web do GitHub, e só então pedir o "sim" para `git push` e a tag
   `v0.0.1`.
+- Dono apagou (confirmado nesta sessão) a decisão sobre `fwcd.kotlin-0.2.36.vsix`: é extensão
+  do VSCode que ele baixou a meu pedido numa sessão anterior; decidiu **deixar como está** na
+  raiz, sem versionar. Não precisa mais perguntar sobre esse arquivo.
+- Gerei a chave real com o `keytool.exe` do JDK 8 local
+  (`C:\Program Files (x86)\Java\jre1.8.0_441`, como o passo 1 do brief descrevia), cadastrei
+  os 4 Secrets (passo 3, feito pelo dono) e, com o "sim" dele, fiz `git push -u origin main`
+  (passo 4) — `testes` passou de verdade no Actions (run `43083373024`, `testes=success`,
+  `release=skipped`, correto por não ser tag). Documentei e comitei (`a1f493a`, depois
+  enviado com outro "sim" separado).
+- Com um terceiro "sim" específico, criei e enviei a tag `v0.0.1` (passo 5). **O job `release`
+  falhou de verdade** (run `43088431682`): `testes=success`, `release=failure`. Sem `gh` CLI
+  nem token local, a API de logs devolve 403 mesmo em repo público — pedi ao dono o texto da
+  página do Actions, e ele colou o log real. Causa exata:
+  ```
+  com.android.ide.common.signing.KeytoolException: Failed to read key *** from store
+  "/projeto/app/assinatura.jks": Get Key failed: getSecretKey failed: Password is not ASCII
+  ```
+  mesmo a senha sendo hexadecimal (ASCII puro) — não é caractere especial na senha.
+- **Debug sistemático (superpowers:systematic-debugging) antes de propor correção:**
+  1. Comparei o JDK: local `java version "1.8.0_441"` (Oracle, legado) vs.
+     `openjdk version "21.0.12.1"` dentro do `cimg/android:2026.10` (o que assina no CI) —
+     diferença real de versão major, confirmada por comando, não suposição.
+  2. Hipótese: JDK 8 e OpenJDK 21 codificam o PKCS12 de formas incompatíveis o bastante para
+     o 21 falhar lendo uma chave gerada pelo 8, mesmo com senha ASCII.
+  3. Teste mínimo: gerei uma chave de teste **dentro do próprio `cimg/android:2026.10`**
+     (`keytool` do OpenJDK 21) e tentei assinar com ela usando o mesmo container. Primeira
+     tentativa deu `keystore password was incorrect` — **isso era bug meu**, não da hipótese:
+     `$env:SENHA_TESTE` não atravessa chamadas separadas do `ctx_execute` (cada uma é um
+     processo novo). Repeti gerando e assinando na **mesma** chamada/sessão: `BUILD
+     SUCCESSFUL`, e `apksigner verify --print-certs` confirmou o certificado de teste —
+     hipótese comprovada com evidência real, não suposição.
+  4. **Causa raiz confirmada**: gerar o keystore com um JDK diferente do que vai usá-lo para
+     assinar quebra a leitura da senha no PKCS12, mesmo com senha 100% ASCII. **Correção**:
+     gerar sempre a chave dentro do mesmo container (`cimg/android:2026.10`), nunca com um
+     JDK local.
+- Enquanto investigava, tentei reproduzir local a falha original (antes de ter o log real) e
+  bati em **dois problemas que eram ruído, não a causa real**: `chmod: ... Operation not
+  permitted` num checkout novo sem `--user root` (bind mount do Windows exige root pra mudar
+  bit de execução num arquivo novo) e `Permission denied` num lock de `.gradle/` que já tinha
+  ficado dono de `root` de uma verificação anterior. Nenhum dos dois acontece no runner Linux
+  do GitHub (checkout limpo, sem bind mount do Windows) — documentado como pegadinha na skill
+  pra não confundir de novo.
+- **Regenerei a chave real de produção dentro do `cimg/android:2026.10`** (alias
+  `iptv-player-free`, CN sem espaço por causa de um problema de quoting do PowerShell com
+  `-dname` contendo espaço — sem efeito funcional, é só o campo do certificado autoassinado).
+  Verifiquei de ponta a ponta antes de considerar pronta: `BUILD SUCCESSFUL in 2m 5s` +
+  `apksigner verify --print-certs` confirmando o certificado novo. `temp/assinatura/
+  valores-secrets.txt` atualizado com os 4 valores novos; artefatos de teste (`teste-jdk21.jks`,
+  `app/assinatura.jks` temporário, `app/build/`) limpos depois.
+- Criada `.claude/skills/iptv-build-assinatura/SKILL.md` com o processo correto e as 4
+  pegadinhas (JDK incompatível, bind mount do Windows, logs do Actions exigindo auth, status
+  de runs/jobs sem auth funciona).
+- **Próximo**: passo 3 repetido — dono precisa **atualizar** (não criar) os 4 Secrets no
+  GitHub com os valores novos de `valores-secrets.txt`. Depois, decidir com o dono o que fazer
+  com a tag `v0.0.1` já publicada (recriar a mesma tag já que nenhuma Release chegou a
+  existir, ou avançar para `v0.0.2`) e pedir um novo "sim" específico para a tag.

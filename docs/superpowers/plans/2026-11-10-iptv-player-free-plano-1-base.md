@@ -206,29 +206,37 @@ Tarefa com ações do dono. Cada push e cada tag precisam do "sim" dele na hora.
 - Criar (fora do git): `temp/assinatura/iptv-player-free.jks`,
   `temp/assinatura/valores-secrets.txt`
 
-- [x] **Passo 1: Gerar a chave** com
-  `& "C:\Program Files (x86)\Java\jre1.8.0_441\bin\keytool.exe" -genkeypair -v -keystore temp\assinatura\iptv-player-free.jks -alias iptv-player-free -keyalg RSA -keysize 4096 -validity 36500 -storetype PKCS12`.
-  Gere senhas aleatórias fortes. Em PKCS12, a senha da chave é igual à do keystore. Grave em
-  `valores-secrets.txt` os 4 nomes de Secret com os valores (keystore em base64 com
-  `[Convert]::ToBase64String([IO.File]::ReadAllBytes(...))`).
+- [x] **Passo 1: Gerar a chave.** **Desvio do passo (achado real, não suposição):** o comando
+  original com `keytool.exe` do JDK 8 local gerou uma chave **incompatível** com o OpenJDK 21
+  de dentro do `cimg/android:2026.10` (o que assina no CI) — a tag `v0.0.1` falhou de verdade
+  no Actions com `KeytoolException: ... Password is not ASCII`, mesmo a senha sendo só
+  hexadecimal. Corrigido gerando a chave **dentro do mesmo container** (comando e pegadinha
+  completos em `.claude/skills/iptv-build-assinatura/SKILL.md`). Chave real regenerada e
+  verificada localmente (`BUILD SUCCESSFUL` + `apksigner verify` confirmando o certificado).
+  Senha aleatória forte; em PKCS12 a senha da chave é igual à do keystore. `valores-secrets.txt`
+  atualizado com os 4 valores novos.
 - [x] **Passo 2: Conferir que nada vazou.** `git status --short` não mostra nada de `temp/`, e
   `git check-ignore -v temp/assinatura/iptv-player-free.jks` mostra a regra `temp/`.
 - [ ] **Passo 3: Guiar o dono no cadastro dos Secrets:** repositório → *Settings* → *Secrets and
   variables* → *Actions* → *New repository secret*, uma vez para cada um dos 4 nomes. Peça a ele
   que guarde `iptv-player-free.jks` e `valores-secrets.txt` fora do repositório (pendrive ou
-  Drive). Explique que, sem eles, as atualizações deixam de instalar por cima.
+  Drive). Explique que, sem eles, as atualizações deixam de instalar por cima. **Repetição
+  necessária:** os 4 Secrets já tinham sido cadastrados com a chave antiga (incompatível);
+  precisam ser **atualizados** com os novos valores.
 - [x] **Passo 4: Com o "sim" do dono,** faça `git push -u origin main`. Esperado: job `testes`
   verde no Actions. Confirmado: run #1 (`43083373024`), `testes` = `success`, `release` =
   `skipped` (correto — só roda em tag).
 - [ ] **Passo 5: Com o "sim" do dono,** crie e envie a tag `v0.0.1`. Esperado: Release `v0.0.1`
-  com `iptv-player-free-0.0.1.apk`.
+  com `iptv-player-free-0.0.1.apk`. **Primeira tentativa (run `43088431682`) falhou de verdade**
+  no job `release` pela chave incompatível do passo 1 — nenhuma Release chegou a ser publicada
+  (confirmado: `GET /releases/tags/v0.0.1` → 404). Repetir após os Secrets serem atualizados.
 - [ ] **Passo 6: Validação pelo dono:** instalar a `v0.0.1` no celular. Depois, mude o texto da
   tela para "IPTV Player Free · v0.0.2", publique a `v0.0.2` (com "sim") e peça que ele instale
   **por cima**, sem desinstalar. Esperado: instala sem "conflito com pacote existente". Só então
   a Fase 0 vira `validada`.
-- [ ] **Passo 7: Documentar.** Crie `.claude/skills/iptv-build-assinatura/SKILL.md` com o
-  processo de chave e Secrets, o comando do Docker, as pegadinhas encontradas e os acertos.
-  Commit `docs: skill de build e assinatura`.
+- [x] **Passo 7: Documentar.** `.claude/skills/iptv-build-assinatura/SKILL.md` criada com o
+  processo de chave e Secrets, o comando do Docker, e as pegadinhas (JDK incompatível, bind
+  mount do Windows, logs do Actions exigindo auth). Commit a seguir.
 
 ---
 
