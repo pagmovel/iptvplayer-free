@@ -82,6 +82,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    implementation(libs.androidx.work.runtime)
+
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
 
@@ -89,6 +91,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    // TestListenableWorkerBuilder (T11, CargaWorkerTest) — testa o CoroutineWorker sem
+    // precisar de um WorkManager real rodando.
+    testImplementation(libs.androidx.work.testing)
     // XmlPullParserFactory não roda fora do Android/Robolectric; kxml2 fornece a
     // implementação org.xmlpull.v1 para o teste JVM puro de LeitorXmltvTest (T8).
     testImplementation(libs.kxml2)

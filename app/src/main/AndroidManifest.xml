@@ -4,7 +4,11 @@
     <!-- O provedor de IPTV só serve conteúdo por http (sem TLS); ver próximas tarefas. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- ACCESS_NETWORK_STATE não precisa ser declarada aqui: o próprio manifest da
+         work-runtime (AAR) já a declara, e o merge do AGP traz ela pra este app (confirmado
+         extraindo o AndroidManifest.xml real de work-runtime-2.12.0.aar nesta sessão). -->
     <application
+        android:name=".AppIptv"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"

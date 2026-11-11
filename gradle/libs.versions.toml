@@ -13,6 +13,9 @@ activityCompose = "1.13.0"
 lifecycleRuntimeKtx = "2.11.0"
 room = "2.8.5"
 workRuntime = "2.12.0"
+# Versão própria (não reaproveita workRuntime) porque é uma dependência nova, separada —
+# mesmo valor 2.12.0 por ser a mesma linha do work-runtime já declarado.
+workTesting = "2.12.0"
 okhttp = "5.5.1"
 kotlinxSerializationJson = "1.12.0"
 kotlinxCoroutinesTest = "1.11.0"
@@ -40,6 +43,7 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
+androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "workTesting" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }

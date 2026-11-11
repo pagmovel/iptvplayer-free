@@ -23,3 +23,15 @@ sealed class FalhaXtream : Exception() {
      */
     data class RespostaInvalida(val detalhe: String) : FalhaXtream()
 }
+
+/**
+ * Mensagem em pt-BR para mostrar ao usuário (decisão do plano, T11) — usada tanto pelo
+ * [io.github.pagmovel.iptvplayer.carga.CargaWorker] quanto pela tela de contas, para a
+ * tradução não ficar duplicada nos dois lugares.
+ */
+fun FalhaXtream.mensagemUsuario(): String = when (this) {
+    is FalhaXtream.CredenciaisInvalidas -> "Usuário ou senha incorretos"
+    is FalhaXtream.ContaInativa -> "Conta do provedor inativa ou vencida ($status)"
+    is FalhaXtream.ServidorIndisponivel -> "Servidor não respondeu. Tente outro endereço do seu provedor."
+    is FalhaXtream.RespostaInvalida -> "O servidor respondeu algo inesperado."
+}

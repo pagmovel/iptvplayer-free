@@ -4,6 +4,7 @@ import io.github.pagmovel.iptvplayer.dados.Conta
 import io.github.pagmovel.iptvplayer.xtream.FalhaXtream
 import io.github.pagmovel.iptvplayer.xtream.XtreamApi
 import androidx.room.withTransaction
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 /** Conta não fica sem atualizar o catálogo por mais de 12h (ver design, §3.1). */
 private const val INTERVALO_CARGA_MS = 12 * 60 * 60 * 1000L
@@ -61,5 +62,15 @@ class ContasRepositorio(
     suspend fun precisaAtualizar(conta: Conta, agoraMs: Long): Boolean {
         val ultima = conta.ultimaCargaEm ?: return true
         return agoraMs - ultima > INTERVALO_CARGA_MS
+    }
+    /** Todas as contas salvas (a tela de contas se atualiza sozinha, ver [ContaDao.listar]). */
+    fun listar(): Flow<List<Conta>> = banco.contaDao().listar()
+    /**
+     * Troca só o servidor da conta (T11: o provedor dá vários endereços para a mesma conta,
+     * ver design §2). Não testa a credencial de novo contra o servidor novo antes de salvar —
+     * se o endereço estiver errado, a próxima carga reporta isso como uma falha normal.
+     */
+    suspend fun editarServidor(conta: Conta, servidor: String) {
+        banco.contaDao().atualizar(conta.copy(servidor = servidor))
     }
 }
