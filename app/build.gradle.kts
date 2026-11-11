@@ -43,6 +43,20 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // O MavenArtifactFetcher do Robolectric baixa os jars android-all/android-all-instrumented
+    // por conta própria, direto de repo1.maven.org — não passa pela resolução de dependências
+    // do Gradle, então o exclusiveContent de settings.gradle.kts não alcança esse download, e
+    // esse host também devolve HTTP 429 (achado real: T10 travou nisso mesmo depois do fix da
+    // T9). Robolectric suporta oficialmente redirecionar esse fetcher para outro repositório
+    // via system property (robolectric.org/blog/2023/11/11/improving-android-all-downloading),
+    // sem precisar de usuário/senha para um espelho público.
+    testOptions {
+        unitTests.all {
+            it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
+            it.systemProperty("robolectric.dependency.repo.id", "google-mirror")
+        }
+    }
 }
 
 // Esquema do Room versionado no repositório, para dar suporte a migrações nas próximas
