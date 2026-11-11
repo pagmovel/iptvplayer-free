@@ -536,3 +536,29 @@ BASE antes da T2: `ded65b4`.
   GitHub com os valores novos de `valores-secrets.txt`. Depois, decidir com o dono o que fazer
   com a tag `v0.0.1` já publicada (recriar a mesma tag já que nenhuma Release chegou a
   existir, ou avançar para `v0.0.2`) e pedir um novo "sim" específico para a tag.
+- Commit `f3cc691` enviado (push autorizado). Dono escolheu `v0.0.2` em vez de recriar
+  `v0.0.1`; com o "sim" dele, criei e enviei a tag `v0.0.2` (run `43097855518`).
+- **Confirmação do passo 3 (Secrets atualizados) ficou ambígua**: perguntei de novo se o
+  dono tinha atualizado os 4 Secrets com os valores novos (pós-regeneração da chave) e ele
+  respondeu "de novo? vc está perguntando coisas que ja tinha respondido" — sem um "sim"
+  claro específico para os valores NOVOS (o "cadatrei" anterior dele era sobre os valores
+  ANTIGOS, da chave quebrada). Não force concluir que está atualizado: se a `v0.0.2` falhar
+  de novo com `Password is not ASCII`, é exatamente esse o sinal.
+- Desviei temporariamente para um pedido do dono ("remover todas as referências ao Smart
+  IPTV Player") — busquei em conteúdo, nome de arquivo e todo o histórico do git por
+  "smart"/"smarters"/"iptv smarters" e variações: **zero ocorrências** neste repositório.
+  Reportei e perguntei onde ele via a referência; ele respondeu "ok, então vamos seguir" —
+  ou seja, não era deste projeto, ou era engano. Nenhuma mudança de código veio disso.
+- Run `43097855518` (tag `v0.0.2`) ficou em `queued` por mais de 30 minutos. Investigando,
+  achei (via `https://www.githubstatus.com/api/v2/incidents/unresolved.json`, sem precisar de
+  auth) um **incidente real e não resolvido da plataforma GitHub** — "Impact across multiple
+  GitHub products including Actions, Pages, and Copilot products", status evoluindo de
+  "investigating" para "monitoring" antes da pausa. Não é causa nossa (Secrets, workflow,
+  chave) — é a infraestrutura do GitHub. Bati no rate limit da API anônima (60 req/hora)
+  de tanto consultar o status do run; espacei as checagens depois.
+- **Dono pediu para parar por hoje.** Nada ficou pendente de commit — tudo commitado e
+  enviado (`f3cc691` é o HEAD de `main` no GitHub). Pendência real para a próxima sessão:
+  (1) conferir se o run `43097855518` terminou e se a Release `v0.0.2` foi publicada (passo 5
+  da T3); (2) se falhou por `Password is not ASCII` de novo, é sinal de que os Secrets ainda
+  não foram atualizados com os valores novos — pedir pro dono atualizar e tentar outra tag
+  com novo "sim"; (3) se passou, seguir pro passo 6 (validação do dono instalando no celular).

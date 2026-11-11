@@ -6,44 +6,60 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Esboços das telas: `.superpowers/brainstorm/`
 - Plano atual: [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 
-## Onde paramos (2026-11-11, T2 concluída e commitada; próximo é T3)
+## Onde paramos (2026-11-11, pausado a pedido do dono — fim do dia, T3 quase completa)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Concluídas,
   testadas e revisadas: T1, T4, T5, T6, T7, T8, T9, T10, T11** (passos 1–6 e 9; 9 de 11
-  tarefas). **T2 concluída, testada localmente e commitada nesta sessão** (ver abaixo). T3
-  continua `pendente` — é a próxima.
-- Dono confirmou (2026-11-11): seguir o plano como escrito — eu (controlador, nunca
-  subagente) conduzo T2 e depois T3, com o "sim" dele a cada push/tag.
-- **T2 commitada (`0e5021d`):**
-  - `app/build.gradle.kts`: `versionCode`/`versionName` agora lêem `GITHUB_RUN_NUMBER`/
-    `VERSAO_APP` (com os defaults `1`/`"0.0.0-dev"`); `signingConfigs.release` só existe se
-    `app/assinatura.jks` existir (nunca localmente — decodificado do Secret só no CI).
-  - `.gitignore`: adicionado `*.jks` e `.kotlin/` (cache do compilador Kotlin, mesma categoria
-    de `.gradle/`/`build/`).
-  - `.github/workflows/build.yml` (novo): job `testes` (push/PR, roda `testDebugUnitTest
-    assembleDebug` dentro do mesmo container `cimg/android:2026.10` do dev local, via `docker
-    run` — **não** usa o Android SDK que viesse no runner `ubuntu-latest`, para garantir a
-    mesma versão já validada nesta sessão); job `release` (só em tag `v*`, depende de
-    `testes`, decodifica o keystore do Secret, monta o `assembleRelease` assinado no mesmo
-    container, renomeia para `iptv-player-free-<versão>.apk`, publica a Release com `gh
-    release create` — isso roda fora do container, direto no runner, porque **confirmei com
-    `docker run cimg/android:2026.10 bash -lc "which gh"` que a imagem não tem `gh`
-    instalado**, então só a montagem do APK roda dentro do container; o `gh` do runner faz a
-    Release).
-  - **Verificação local completa** (`./scripts/gradle.ps1 testDebugUnitTest assembleDebug
-    assembleRelease`, rodada em segundo plano para não bater no timeout de 10 min da
-    ferramenta): `BUILD SUCCESSFUL in 1m 2s`, com `app/build/outputs/apk/release/
-    app-release-unsigned.apk` (9.378.118 bytes) gerado de fato. Só então commitei, como manda
-    a regra do projeto (não commitar sem ver passar de verdade).
-  - Ainda falta rodar de verdade no GitHub Actions (só acontece após o push da T3) — por
-    isso T2 está `testada`, não `validada`, no plano.
-- **Próximo: T3** — gerar a chave real com `keytool`, salvar em `temp/assinatura/` — fora do
-  git —, e guiar o dono no cadastro dos 4 Secrets no GitHub, já que esta máquina não tem `gh`
-  CLI instalado, o cadastro dos Secrets tem que ser pela interface web. Push e tag continuam
-  precisando do "sim" específico na hora, nunca inferido de uma autorização anterior.
-- Pendência aberta: `fwcd.kotlin-0.2.36.vsix` apareceu solto na raiz do projeto (não é do
-  projeto, parece extensão de IDE baixada por engano) — perguntei ao dono se apago; segue
-  fora do git até a resposta.
+  tarefas). **T2 concluída, commitada e testada de verdade no Actions** (push da T3 fez o
+  job `testes` rodar e passar: run `43083373024`). **T3 com código/chave prontos, mas a
+  primeira Release pública (`v0.0.2`) ainda não terminou de rodar** — ver abaixo.
+- **T2** (`0e5021d`, `.github/workflows/build.yml` + `app/build.gradle.kts` + `.gitignore`):
+  `versionCode`/`versionName` de `GITHUB_RUN_NUMBER`/`VERSAO_APP`; `signingConfigs.release`
+  condicional a `app/assinatura.jks` existir; job `testes` (push/PR) e job `release` (só tag
+  `v*`, decodifica o keystore do Secret, monta e assina dentro do mesmo container
+  `cimg/android:2026.10`, publica a Release com `gh release create` rodando fora do
+  container — a imagem não tem `gh`). Confirmado rodando de verdade no Actions.
+- **T3 — achado real e corrigido nesta sessão:** a primeira chave de assinatura foi gerada
+  com o `keytool` do **JDK 8 local** (`jre1.8.0_441`), como o passo 1 do plano mandava. A tag
+  `v0.0.1` rodou o job `release` de verdade e **falhou**: `KeytoolException: ... Password is
+  not ASCII`, mesmo a senha sendo hexadecimal (ASCII puro). Causa raiz confirmada com debug
+  sistemático (comparei os JDKs: local `1.8.0_441` vs. **OpenJDK 21** dentro do
+  `cimg/android:2026.10`, que é quem assina no CI de verdade; testei gerar+assinar com o
+  mesmo JDK 21 → `BUILD SUCCESSFUL` + `apksigner verify` confirmou o certificado). **Chave
+  real de produção foi regenerada dentro do `cimg/android:2026.10`** (mesmo JDK que assina),
+  verificada de ponta a ponta localmente antes de seguir. Processo completo e as pegadinhas
+  (incluindo duas que eram ruído do bind mount do Windows, não da causa real) estão em
+  `.claude/skills/iptv-build-assinatura/SKILL.md` — **leia antes de mexer em chave/assinatura
+  de novo**.
+- Como a `v0.0.1` falhou sem publicar Release nenhuma (confirmado: 404 em
+  `/releases/tags/v0.0.1`), o dono decidiu pular direto para **`v0.0.2`** em vez de recriar a
+  `v0.0.1`. Tag `v0.0.2` criada e enviada (run `43097855518`).
+- **Esse run ficou travado em `queued` por mais de 30 minutos** — não é problema nosso:
+  confirmado por `https://www.githubstatus.com` que há uma **interrupção parcial real da
+  plataforma GitHub agora**, afetando Actions/Pages/Copilot (status passou de
+  "investigating" para "monitoring" antes da pausa, ainda não "resolved"). Nada a fazer do
+  nosso lado além de esperar.
+- **[A VERIFICAR] se os 4 Secrets no GitHub já estão com os valores NOVOS** (os da chave
+  regenerada, em `temp/assinatura/valores-secrets.txt`) — o dono disse ter cadastrado os
+  Secrets antes da troca de chave; depois da troca, pedi para **atualizar** (não criar de
+  novo) com os valores novos, mas a confirmação ficou ambígua na conversa (o dono reclamou de
+  pergunta repetida). **Não supor**: se o run da `v0.0.2` falhar de novo com a mesma
+  `KeytoolException`/"Password is not ASCII", é sinal de que os Secrets ainda estão com a
+  chave antiga — nesse caso, pedir para atualizar os 4 com os valores de
+  `temp/assinatura/valores-secrets.txt` (gerados dentro do container, chave boa) antes de
+  tentar de novo.
+- **Próxima sessão:** checar o status do run `43097855518` (tag `v0.0.2`) —
+  `https://github.com/pagmovel/iptvplayer-free/actions/runs/43097855518` — e o incidente em
+  `https://www.githubstatus.com`. Se passou: confirmar a Release `v0.0.2` publicada com
+  `iptv-player-free-0.0.2.apk` (passo 5 do plano T3), e seguir pro passo 6 (dono instala no
+  celular, valida). Se falhou por `Password is not ASCII` de novo: é os Secrets desatualizados,
+  não um bug novo — atualizar e tentar outra tag (`v0.0.3`?) com um novo "sim". Se falhou por
+  outro motivo: log real da página do Actions antes de supor a causa (API de logs dá 403 sem
+  `gh`/token nesta máquina — já documentado na skill).
+- Pendência aberta, resolvida nesta sessão: `fwcd.kotlin-0.2.36.vsix` era uma extensão do
+  VSCode baixada a pedido meu numa sessão anterior; o dono decidiu **deixar como está** na
+  raiz, sem versionar — não perguntar de novo.
+- Working tree limpo, tudo commitado e enviado (`f3cc691` é o HEAD de `main`).
 - O bloqueio de HTTP 429 do Maven Central no artefato do Robolectric
   (`org.robolectric:nativeruntime-dist-compat:1.0.19`) foi contornado em `settings.gradle.kts`
   com `exclusiveContent { forRepository { maven(espelho do Google) }; filter {
