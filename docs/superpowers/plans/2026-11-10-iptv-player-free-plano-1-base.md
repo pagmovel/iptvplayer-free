@@ -54,7 +54,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T7 · Banco local (Room + FTS) | `testada` |
 | 1 | T8 · Leitor de XMLTV | `testada` |
 | 1 | T9 · Carga do catálogo (orquestração) | `testada` |
-| 1 | T10 · Contas: cofre de senha e repositório | `pendente` |
+| 1 | T10 · Contas: cofre de senha e repositório | `testada` |
 | 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `pendente` |
 
 ## Restrições globais

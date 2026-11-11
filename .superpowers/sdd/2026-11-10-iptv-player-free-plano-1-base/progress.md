@@ -333,3 +333,24 @@ BASE antes da T10: `abdc896`.
   agora passa de ponta a ponta. Fica resolvido para a T11 também.
 - Task 10: pacote de revisão gerado (`review-abdc896..39a9207.diff`, só o diff do código da
   T10). Revisor despachado (modelo sonnet, agente em segundo plano).
+- Task 10: revisão — **1 Importante, 0 crítico.** `ativar(id)` desativava/ativava contas com
+  N `UPDATE`s separados (`forEach` + `atualizar`), sem `banco.withTransaction` — um crash no
+  meio do loop podia deixar **zero** contas ativas, quebrando a invariante que
+  `ContaDao.ativa(): Conta?` pressupõe. Nenhum dos 5 testes exercitava esse crash, por isso
+  não foi pego pela suíte. O resto confere: `Cofre`/`CofreKeystore` (IV de 12 bytes
+  prefixado, formato exato confirmado), `ContaDao` (6 assinaturas literais),
+  `testarESalvar`/`credenciais`/`precisaAtualizar` (aritmética dos 3 pontos de fronteira
+  confirmada), `BancoApp.kt` sem duplicação e versão 1 mantida, os 5 testes literais e não
+  round-trip. Revisor confirmou por fora que `cef9d77` (infra) não mexe em `conta/`, e que
+  não há push/tag. 2 minor: (1) `apagar(id)` com o mesmo padrão sem transação (mesma causa,
+  severidade menor — catálogo órfão, não a invariante de conta ativa); (2) teste de "apagar
+  conta apaga o catálogo dela" não prova seletividade entre contas (lacuna de cobertura, a
+  query já filtra por `contaId` certo).
+- **Corrigido o Importante e o minor #2 juntos** (mesma causa raiz, mesmo padrão de fix):
+  `ativar`/`apagar` agora rodam dentro de `banco.withTransaction { }`, igual à T9 (commit
+  `4239594`). Re-verificado de fato: `./scripts/gradle.ps1 testDebugUnitTest --tests
+  "*ContasRepositorioTest*"` → 5/5, XML com timestamp do próprio run. Minor #1 (cobertura de
+  teste de seletividade) fica deferred, fora do escopo do brief.
+- Task 10: complete (commits abdc896..4239594: `39a9207` código, `cef9d77` infra do
+  Robolectric, `98ce68b` docs, `4239594` fix do Importante; review com 1 achado real
+  corrigido, 1 minor deferred).

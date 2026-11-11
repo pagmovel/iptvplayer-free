@@ -9,7 +9,7 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 ## Onde paramos (2026-11-11)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Concluídas,
-  testadas e revisadas: T1, T4, T5, T6, T7, T8, T9** (8 de 11). Faltam T10, T11.
+  testadas e revisadas: T1, T4, T5, T6, T7, T8, T9, T10** (9 de 11). Falta só T11.
 - O bloqueio de HTTP 429 do Maven Central no artefato do Robolectric
   (`org.robolectric:nativeruntime-dist-compat:1.0.19`) foi contornado em `settings.gradle.kts`
   com `exclusiveContent { forRepository { maven(espelho do Google) }; filter {
@@ -19,9 +19,12 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
   para o binário do mesmo módulo. T10/T11 também usam Robolectric de verdade e já se beneficiam
   dessa correção. Docker Desktop local precisa estar rodando para o `./scripts/gradle.ps1`
   funcionar — `docker desktop start` se estiver parado.
-- T9 (`carga/CargaCatalogo.kt`/`CargaCatalogoTest.kt`) commitada, verificada de fato (4/4
-  testes, BUILD SUCCESSFUL) e revisada (aprovada, 0 crítico, 0 importante). Detalhe completo
-  no ledger do SDD (`.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md`).
+- T9 (`carga/CargaCatalogo.kt`/`CargaCatalogoTest.kt`) e T10 (`conta/Cofre.kt`,
+  `conta/ContaDao.kt`, `conta/ContasRepositorio.kt`) commitadas, verificadas de fato e
+  revisadas — T10 teve 1 achado Importante real (`ativar()` sem transação, corrigido).
+  Suíte completa do projeto passa de ponta a ponta: **8 classes, 41 testes, 0 falhas**.
+  Detalhe completo no ledger do SDD
+  (`.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md`).
 - Só há commits locais; **nada foi enviado ao GitHub**. Push e tag dependem do "sim" do dono na
   hora (T3 e T11 do plano).
 - Fora do git: `listas.txt` (credenciais) e `temp/` (`coletar_amostras.py` e
