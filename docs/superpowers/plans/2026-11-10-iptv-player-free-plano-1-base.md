@@ -46,7 +46,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | Fase | Tarefa | Estado |
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
-| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (local; falta rodar de verdade no Actions, que depende da T3) |
+| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (local e no Actions — job `testes` passou de verdade no push da T3; falta a Release assinada, que só roda com tag) |
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `testada` |
@@ -217,8 +217,9 @@ Tarefa com ações do dono. Cada push e cada tag precisam do "sim" dele na hora.
   variables* → *Actions* → *New repository secret*, uma vez para cada um dos 4 nomes. Peça a ele
   que guarde `iptv-player-free.jks` e `valores-secrets.txt` fora do repositório (pendrive ou
   Drive). Explique que, sem eles, as atualizações deixam de instalar por cima.
-- [ ] **Passo 4: Com o "sim" do dono,** faça `git push -u origin main`. Esperado: job `testes`
-  verde no Actions.
+- [x] **Passo 4: Com o "sim" do dono,** faça `git push -u origin main`. Esperado: job `testes`
+  verde no Actions. Confirmado: run #1 (`43083373024`), `testes` = `success`, `release` =
+  `skipped` (correto — só roda em tag).
 - [ ] **Passo 5: Com o "sim" do dono,** crie e envie a tag `v0.0.1`. Esperado: Release `v0.0.1`
   com `iptv-player-free-0.0.1.apk`.
 - [ ] **Passo 6: Validação pelo dono:** instalar a `v0.0.1` no celular. Depois, mude o texto da
