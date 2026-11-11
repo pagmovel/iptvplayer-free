@@ -21,8 +21,11 @@ android {
         applicationId = "io.github.pagmovel.iptvplayer"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        // Em CI (T2): versionName vem da tag (sem o "v", variável VERSAO_APP) e versionCode do
+        // número da run do Actions (GITHUB_RUN_NUMBER). Localmente, sem essas variáveis, usa os
+        // valores padrão abaixo.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VERSAO_APP") ?: "0.0.0-dev"
     }
 
     buildFeatures {
@@ -30,9 +33,27 @@ android {
         buildConfig = true
     }
 
+    // T2: assina o release só se o keystore existir (`app/assinatura.jks`, decodificado do
+    // Secret base64 pelo workflow do GitHub Actions — nunca versionado, ver .gitignore). Sem
+    // ele, o release fica sem assinar e o build local continua funcionando.
+    val arquivoAssinatura = file("assinatura.jks")
+    signingConfigs {
+        if (arquivoAssinatura.exists()) {
+            create("release") {
+                storeFile = arquivoAssinatura
+                storePassword = System.getenv("ASSINATURA_KEYSTORE_SENHA")
+                keyAlias = System.getenv("ASSINATURA_ALIAS")
+                keyPassword = System.getenv("ASSINATURA_ALIAS_SENHA")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (arquivoAssinatura.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

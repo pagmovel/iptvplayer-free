@@ -13,9 +13,14 @@ temp/
 # Build Android/Gradle: gerado, não versionado (o wrapper em gradle/wrapper/ fica fora disso)
 build/
 .gradle/
+.kotlin/
 local.properties
 *.apk
 *.aab
 .cxx/
 captures/
 .idea/
+
+# Chave de assinatura (T2/T3): só existe localmente se decodificada do Secret do CI; nunca
+# versionar o keystore em si.
+*.jks

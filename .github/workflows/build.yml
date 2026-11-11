@@ -1,0 +1,57 @@
+name: Build
+
+# T2 do plano 1: testes + build debug em todo push/PR; em tag v*, build release assinado e
+# Release do GitHub. Usa o mesmo container cimg/android:2026.10 do dev local
+# (scripts/gradle.ps1), via `docker run`, em vez do Android SDK que vier no runner — garante
+# a mesma versão de SDK/Gradle já validada nesta sessão, sem depender do que o ubuntu-latest
+# tiver pré-instalado.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testes e build debug (container cimg/android:2026.10)
+        run: |
+          docker run --rm -v "$PWD:/projeto" -w /projeto cimg/android:2026.10 \
+            bash -lc "chmod +x ./gradlew && ./gradlew testDebugUnitTest assembleDebug --no-daemon"
+
+  release:
+    needs: testes
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decodifica o keystore de assinatura
+        run: echo "${{ secrets.ASSINATURA_KEYSTORE_BASE64 }}" | base64 -d > app/assinatura.jks
+      - name: Monta o APK release assinado (container cimg/android:2026.10)
+        env:
+          ASSINATURA_KEYSTORE_SENHA: ${{ secrets.ASSINATURA_KEYSTORE_SENHA }}
+          ASSINATURA_ALIAS: ${{ secrets.ASSINATURA_ALIAS }}
+          ASSINATURA_ALIAS_SENHA: ${{ secrets.ASSINATURA_ALIAS_SENHA }}
+        run: |
+          VERSAO_APP="${GITHUB_REF_NAME#v}"
+          docker run --rm \
+            -e VERSAO_APP="$VERSAO_APP" \
+            -e GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" \
+            -e ASSINATURA_KEYSTORE_SENHA="$ASSINATURA_KEYSTORE_SENHA" \
+            -e ASSINATURA_ALIAS="$ASSINATURA_ALIAS" \
+            -e ASSINATURA_ALIAS_SENHA="$ASSINATURA_ALIAS_SENHA" \
+            -v "$PWD:/projeto" -w /projeto cimg/android:2026.10 \
+            bash -lc "chmod +x ./gradlew && ./gradlew assembleRelease --no-daemon"
+          echo "VERSAO_APP=$VERSAO_APP" >> "$GITHUB_ENV"
+      - name: Renomeia o APK para publicação
+        run: cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/iptv-player-free-${VERSAO_APP}.apk"
+      - name: Publica a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "app/build/outputs/apk/release/iptv-player-free-${VERSAO_APP}.apk" --generate-notes
