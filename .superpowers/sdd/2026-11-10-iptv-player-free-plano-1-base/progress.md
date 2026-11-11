@@ -354,3 +354,13 @@ BASE antes da T10: `abdc896`.
 - Task 10: complete (commits abdc896..4239594: `39a9207` código, `cef9d77` infra do
   Robolectric, `98ce68b` docs, `4239594` fix do Importante; review com 1 achado real
   corrigido, 1 minor deferred).
+BASE antes da T11: `b97b595`.
+- Task 11 (última do plano): despachado (implementador, modelo sonnet). Brief:
+  `task-11-brief.md`. Relatório esperado em `task-11-report.md`. Instruído a executar só os
+  passos 1–6 e 9 do brief — **não** os passos 7 (push + tag `v0.1.0`, exige o "sim" do dono)
+  e 8 (validação manual no celular, só o dono faz). Avisado sobre: `ContasRepositorio` já
+  corrigido (transação em `ativar`/`apagar`), assinaturas reais de T4/T9/T10, dependências
+  que faltam adicionar (`work-runtime` já no catálogo mas não em `app/build.gradle.kts`,
+  `work-testing` não existe ainda), preferência por navegação manual em vez de
+  navigation-compose (YAGNI), e que o passo 5 do brief (`assembleDebug`) é verificação mais
+  forte que as tarefas anteriores.
