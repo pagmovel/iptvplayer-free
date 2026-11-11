@@ -6,19 +6,20 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Esboços das telas: `.superpowers/brainstorm/`
 - Plano atual: [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 
-## Onde paramos (2026-11-11, pausado a pedido do dono em pleno T2)
+## Onde paramos (2026-11-11, T2 concluída e commitada; próximo é T3)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Concluídas,
   testadas e revisadas: T1, T4, T5, T6, T7, T8, T9, T10, T11** (passos 1–6 e 9; 9 de 11
-  tarefas). T2 e T3 continuavam `pendente` até eu começar a T2 nesta sessão (ver abaixo).
-- Perguntei ao dono sobre o gap de T2/T3; ele confirmou (2026-11-11): "revise o plano,
-  porque vc tinha dito que vc mesmo geraria a chave" — ou seja, seguir o plano como escrito:
-  eu (controlador, nunca subagente) conduzo T2 e depois T3, com o "sim" dele a cada push/tag.
-- **T2 em andamento, código escrito mas NÃO COMITADO (verificação não terminou):**
+  tarefas). **T2 concluída, testada localmente e commitada nesta sessão** (ver abaixo). T3
+  continua `pendente` — é a próxima.
+- Dono confirmou (2026-11-11): seguir o plano como escrito — eu (controlador, nunca
+  subagente) conduzo T2 e depois T3, com o "sim" dele a cada push/tag.
+- **T2 commitada (`0e5021d`):**
   - `app/build.gradle.kts`: `versionCode`/`versionName` agora lêem `GITHUB_RUN_NUMBER`/
     `VERSAO_APP` (com os defaults `1`/`"0.0.0-dev"`); `signingConfigs.release` só existe se
     `app/assinatura.jks` existir (nunca localmente — decodificado do Secret só no CI).
-  - `.gitignore`: adicionado `*.jks`.
+  - `.gitignore`: adicionado `*.jks` e `.kotlin/` (cache do compilador Kotlin, mesma categoria
+    de `.gradle/`/`build/`).
   - `.github/workflows/build.yml` (novo): job `testes` (push/PR, roda `testDebugUnitTest
     assembleDebug` dentro do mesmo container `cimg/android:2026.10` do dev local, via `docker
     run` — **não** usa o Android SDK que viesse no runner `ubuntu-latest`, para garantir a
@@ -29,24 +30,20 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
     `docker run cimg/android:2026.10 bash -lc "which gh"` que a imagem não tem `gh`
     instalado**, então só a montagem do APK roda dentro do container; o `gh` do runner faz a
     Release).
-  - **Rodei a verificação local do passo 3 do brief** (`./scripts/gradle.ps1
-    testDebugUnitTest assembleDebug assembleRelease`) e ela **não terminou** (timeout de
-    10 min no meio de `optimizeReleaseResources`, provavelmente só a primeira vez compilando
-    a variante `release`, nunca compilada antes neste projeto — pode ser normal, não
-    necessariamente um problema). **Parei o container a pedido do dono antes de saber o
-    resultado.** Por isso **não commitei nada do T2** — regra do projeto é não commitar sem
-    ver passar de verdade.
-- **Próxima sessão:** rodar de novo `./scripts/gradle.ps1 testDebugUnitTest assembleDebug
-  assembleRelease` (pode dar mais tempo que o timeout de 10 min da ferramenta — considerar
-  rodar em background ou com timeout maior) e só commitar o T2 depois de ver `BUILD
-  SUCCESSFUL` com o release **sem assinatura** (sem `app/assinatura.jks` presente). Depois
-  disso: T3 (gerar a chave real com `keytool`, salvar em `temp/assinatura/` — fora do git —,
-  e guiar o dono no cadastro dos 4 Secrets no GitHub, já que esta máquina não tem `gh` CLI
-  instalado, o cadastro dos Secrets tem que ser pela interface web). Push e tag continuam
+  - **Verificação local completa** (`./scripts/gradle.ps1 testDebugUnitTest assembleDebug
+    assembleRelease`, rodada em segundo plano para não bater no timeout de 10 min da
+    ferramenta): `BUILD SUCCESSFUL in 1m 2s`, com `app/build/outputs/apk/release/
+    app-release-unsigned.apk` (9.378.118 bytes) gerado de fato. Só então commitei, como manda
+    a regra do projeto (não commitar sem ver passar de verdade).
+  - Ainda falta rodar de verdade no GitHub Actions (só acontece após o push da T3) — por
+    isso T2 está `testada`, não `validada`, no plano.
+- **Próximo: T3** — gerar a chave real com `keytool`, salvar em `temp/assinatura/` — fora do
+  git —, e guiar o dono no cadastro dos 4 Secrets no GitHub, já que esta máquina não tem `gh`
+  CLI instalado, o cadastro dos Secrets tem que ser pela interface web. Push e tag continuam
   precisando do "sim" específico na hora, nunca inferido de uma autorização anterior.
-- Estado do git nesta pausa: `.gitignore` e `app/build.gradle.kts` modificados,
-  `.github/workflows/build.yml` novo — **tudo não comitado, de propósito**. `.kotlin/` (cache
-  do Gradle/Kotlin, gerado pela tentativa de build) ficou untracked, não é pra comitar.
+- Pendência aberta: `fwcd.kotlin-0.2.36.vsix` apareceu solto na raiz do projeto (não é do
+  projeto, parece extensão de IDE baixada por engano) — perguntei ao dono se apago; segue
+  fora do git até a resposta.
 - O bloqueio de HTTP 429 do Maven Central no artefato do Robolectric
   (`org.robolectric:nativeruntime-dist-compat:1.0.19`) foi contornado em `settings.gradle.kts`
   com `exclusiveContent { forRepository { maven(espelho do Google) }; filter {

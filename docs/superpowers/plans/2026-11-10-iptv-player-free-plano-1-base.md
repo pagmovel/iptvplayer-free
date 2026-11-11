@@ -46,7 +46,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | Fase | Tarefa | Estado |
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
-| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `pendente` (código escrito, verificação local não terminou — sem commit) |
+| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (local; falta rodar de verdade no Actions, que depende da T3) |
 | 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `testada` |
@@ -176,20 +176,27 @@ class EsqueletoTest {
   testes, `assembleRelease` assinado e uma Release do GitHub com o anexo
   `iptv-player-free-<versão>.apk`.
 
-- [ ] **Passo 1: Assinatura e versão no Gradle.** `signingConfigs.release` lê as 4 variáveis de
+- [x] **Passo 1: Assinatura e versão no Gradle.** `signingConfigs.release` lê as 4 variáveis de
   ambiente acima; o keystore é decodificado do base64 para `app/assinatura.jks` pelo workflow.
   Sem as variáveis, o `release` não assina, para o build local não quebrar. `versionName` = tag
   sem o `v` (variável `VERSAO_APP`; padrão `0.0.0-dev`). `versionCode` = `GITHUB_RUN_NUMBER`
   (padrão `1`). Adicione `app/assinatura.jks` e `*.jks` ao `.gitignore`.
-- [ ] **Passo 2: Workflow.** Use JDK 17 com `actions/setup-java` e cache do Gradle. Os jobs
-  `testes` (sempre) e `release` (`if: startsWith(github.ref, 'refs/tags/v')`, depende de
-  `testes`) criam a Release com `gh release create "$GITHUB_REF_NAME" <apk> --generate-notes`.
-  Use `permissions: contents: write` só no job de release. **Nunca** suba o keystore como
-  artefato.
-- [ ] **Passo 3: Verificar localmente** que o build sem as variáveis continua funcionando:
-  `./scripts/gradle.ps1 testDebugUnitTest assembleDebug assembleRelease`. Esperado:
-  `BUILD SUCCESSFUL`, com o APK release não assinado.
-- [ ] **Passo 4: Commit.** `ci: build, testes e release assinada no GitHub Actions`.
+  - **Desvio do passo (anotado, não é suposição):** em vez de `actions/setup-java` + SDK do
+    runner, o workflow roda os dois jobs dentro do mesmo container `cimg/android:2026.10` do
+    `scripts/gradle.ps1`, via `docker run` — garante a mesma versão de SDK/Gradle/Kotlin já
+    validada nesta sessão em vez do que o `ubuntu-latest` tiver instalado. Confirmado antes
+    (`docker run cimg/android:2026.10 bash -lc "which gh"`) que a imagem não tem `gh`, então só a
+    montagem do APK roda no container; `gh release create` roda fora dele, direto no runner.
+- [x] **Passo 2: Workflow.** Os jobs `testes` (sempre) e `release` (`if:
+  startsWith(github.ref, 'refs/tags/v')`, depende de `testes`) criam a Release com
+  `gh release create "$GITHUB_REF_NAME" <apk> --generate-notes`. `permissions: contents: write`
+  só no job de release. Keystore nunca sobe como artefato.
+- [x] **Passo 3: Verificar localmente** que o build sem as variáveis continua funcionando:
+  `./scripts/gradle.ps1 testDebugUnitTest assembleDebug assembleRelease`. Resultado:
+  `BUILD SUCCESSFUL in 1m 2s`, com `app/build/outputs/apk/release/app-release-unsigned.apk`
+  gerado (9.378.118 bytes).
+- [x] **Passo 4: Commit.** `0e5021d` — `feat: CI/CD com build/testes automáticos e assinatura
+  condicional (T2)`.
 
 ### T3: Chave de assinatura, Secrets e primeira Release
 

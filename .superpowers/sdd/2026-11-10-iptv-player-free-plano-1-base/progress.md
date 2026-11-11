@@ -454,3 +454,29 @@ BASE antes da T2: `ded65b4`.
   `temp/assinatura/`, fora do git; guiar o dono no cadastro dos 4 Secrets pela interface web
   do GitHub, já que não há `gh` CLI nesta máquina para fazer isso por linha de comando;
   push e tag só com o "sim" específico na hora).
+- Retomada em 2026-11-11 a pedido do dono ("continuar a partir do handoff"). Docker Desktop
+  estava parado (confirmado por `docker ps` falhando com `dockerDesktopLinuxEngine ... The
+  system cannot find the file specified`); iniciado e confirmado pronto por
+  `docker version --format '{{.Server.Version}}'` → `29.9.2` antes de repetir o build, em vez
+  de supor que já estava de pé.
+- Rodei `./scripts/gradle.ps1 testDebugUnitTest assembleDebug assembleRelease` em segundo
+  plano (sem o limite de 10 min da ferramenta de primeiro plano). Resultado: `BUILD
+  SUCCESSFUL in 1m 2s` (97 tasks: 8 executadas, 89 up-to-date — a maior parte já tinha ficado
+  em cache da tentativa interrompida). `testDebugUnitTest` saiu `UP-TO-DATE`: já tinha
+  passado antes com os mesmos inputs, não precisou rodar de novo. Confirmei no disco
+  `app/build/outputs/apk/release/app-release-unsigned.apk` (9.378.118 bytes, timestamp da
+  execução) — o release sem assinatura monta de verdade.
+- **T2 commitada**: `0e5021d` — `feat: CI/CD com build/testes automáticos e assinatura
+  condicional (T2)` (`.gitignore`, `app/build.gradle.kts`, `.github/workflows/build.yml`).
+  Autoria pela regra do projeto (`GIT_AUTHOR_NAME`/`EMAIL` via variável de ambiente, repo sem
+  `user.name`/`user.email` local — confirmado por `git config --local` vazio antes de aplicar
+  a regra). Aproveitei o commit para adicionar `.kotlin/` ao `.gitignore` (cache do
+  compilador Kotlin gerado pelo build, igual a `.gradle/`/`build/`, ficou untracked desde a
+  pausa) — não entrou no commit nada do `fwcd.kotlin-0.2.36.vsix` solto na raiz (não é do
+  projeto; perguntei ao dono se apago).
+- Tabela de acompanhamento e passos 1–4 do T2 no plano marcados `testada`/`[x]` — falta rodar
+  de verdade no Actions, que só acontece depois do push da T3 (passo 4), e por isso T2 segue
+  sem `validada`.
+- **Próximo**: T3 — gerar a chave real (`keytool`, fora do git), guiar o dono no cadastro dos
+  4 Secrets pela interface web do GitHub, e só então pedir o "sim" para `git push` e a tag
+  `v0.0.1`.
