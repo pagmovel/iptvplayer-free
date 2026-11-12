@@ -700,6 +700,17 @@ BASE antes da T2: `ded65b4`.
   - **Falta real agora**: passo 7 da T11 (publicar a tag `v0.1.0`, com a autorização de tag já
     liberada pelo dono) e depois o passo 8 (pedir o teste dos itens 4-5 no celular). Só então
     o Plano 1 inteiro fecha como `validada`.
+- **Investigação (systematic-debugging) de um relato do dono que parecia bug**: "continua
+  carregando todas as listas mas não muda pra nenhuma tela, fica na tela que te enviei". Antes
+  de supor qualquer causa, perguntei os fatos (o que ele fez, se o texto de etapa mudava, quanto
+  tempo esperou) e pedi o print da tela. **Não é bug**: o print mostrou a carga concluída com
+  sucesso ("Última carga: 12/11/2026 14:36", sem erro, números corretos — 946/15896/7746/14447),
+  um minuto depois de ele apertar "Atualizar agora" e ver o texto de etapa mudando normalmente
+  (canais → filmes → séries → programação). O comportamento é por design: essa tela de Resumo
+  (provisória, T11) não navega pra lugar nenhum ao terminar — só atualiza os números e a data no
+  próprio lugar; não existe hoje nenhuma outra tela pra ir (Fase 2 — TV ao vivo — ainda não foi
+  construída). O próprio dono confirmou que já era assim na v0.0.5 também — nenhuma mudança de
+  código feita.
 - **Tag `v0.1.0` publicada com sucesso** (run `43267230618`): `testes = success`,
   `release = success`. Release: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0,
   anexo `iptv-player-free-0.1.0.apk` (9.390.406 bytes, igual à v0.0.5 — nenhum código do app
