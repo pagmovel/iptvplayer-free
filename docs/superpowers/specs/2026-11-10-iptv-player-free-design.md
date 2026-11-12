@@ -276,14 +276,14 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 - [x] Carga em fluxo da programação — `validada`
 
 **Fase 2 · TV ao vivo** (detalhe completo acima, em "TV ao vivo")
-- [ ] Tela dividida com player, lista de canais agrupados por qualidade (SD/HD/FHD/4K) e
-  categorias (incluindo Favoritos) — `pendente`
-- [ ] Troca de qualidade automática (com tempo configurável) e manual, com selo na tela — `pendente`
-- [ ] OSD do player (abre ao tocar, some sozinho): canal/programa atual, qualidade, canal
-  anterior/próximo, atalho pra grade de programação, Gerenciar contas e Configurações — `pendente`
-- [ ] Aba Programação (Ontem/Hoje/Amanhã) e programa atual na lista — `pendente`
-- [ ] Tela cheia ao deitar o celular — `pendente`
-- [ ] Tela Configurações (tempo de buffer/erro antes da troca automática, padrão 8s) — `pendente`
+- [x] Tela dividida com player, lista de canais agrupados por qualidade (SD/HD/FHD/4K) e
+  categorias (incluindo Favoritos) — `testada`
+- [x] Troca de qualidade automática (com tempo configurável) e manual, com selo na tela — `testada`
+- [x] OSD do player (abre ao tocar, some sozinho): canal/programa atual, qualidade, canal
+  anterior/próximo, atalho pra grade de programação, Gerenciar contas e Configurações — `testada`
+- [x] Aba Programação (Ontem/Hoje/Amanhã) e programa atual na lista — `testada`
+- [x] Tela cheia ao deitar o celular — `testada`
+- [x] Tela Configurações (tempo de buffer/erro antes da troca automática, padrão 8s) — `testada`
 
 **Fase 3 · Filmes e séries**
 - [ ] Listas por categoria, detalhes, temporadas e episódios — `pendente`
