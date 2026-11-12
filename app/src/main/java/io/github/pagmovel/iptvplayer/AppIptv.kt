@@ -1,6 +1,7 @@
 package io.github.pagmovel.iptvplayer
 import android.app.Application
 import androidx.room.Room
+import io.github.pagmovel.iptvplayer.configuracoes.ConfiguracoesRepositorio
 import io.github.pagmovel.iptvplayer.conta.Cofre
 import io.github.pagmovel.iptvplayer.conta.CofreKeystore
 import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
@@ -25,4 +26,5 @@ class AppIptv : Application() {
     val cofre: Cofre by lazy { CofreKeystore() }
     val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }
     val contasRepositorio: ContasRepositorio by lazy { ContasRepositorio(banco, cofre, criarApi) }
+    val configuracoes: ConfiguracoesRepositorio by lazy { ConfiguracoesRepositorio(getSharedPreferences("config", MODE_PRIVATE)) }
 }
