@@ -44,7 +44,16 @@ O que define o sucesso:
   vamos primeiro criar o app".
 - Catch-up (assistir a um programa que já passou), gravação, controle parental, Chromecast,
   legendas externas, grade completa canais × horários.
-- **Login por lista M3U.** O dono não usa, e o provedor dele bloqueia o download (§3.1).
+- **Login por lista M3U — por enquanto.** *(Esclarecido pelo dono em 2026-11-12: "eu disse
+  que eu não uso, mas outros podem querer usar.")* Fica fora desta versão porque o dono (que é
+  quem usa e testa hoje) não usa M3U — ele mesmo não bloqueia nem descarta a ideia para outros
+  usuários. Como o app será distribuído para família e amigos (Fase 5), e alguns podem ter só
+  um link M3U de outro provedor (não Xtream Codes), isso fica registrado como candidato a uma
+  fase/plano futuro, separado — não é o mesmo trabalho de ajustar a Fase 2 (TV ao vivo) nem do
+  login Xtream já em produção. Precisa de brainstorming próprio quando chegar a hora: M3U é um
+  formato de playlist genérico (texto `#EXTINF`), bem diferente da API Xtream Codes que o app
+  usa hoje para tudo (categorias, streams, VOD) — dá suporte a um provedor sem servir Xtream
+  Codes, mas exige um caminho de leitura/parsing paralelo ao que já existe.
 - Vários servidores por conta, com troca automática quando um cai. O provedor dá 4 endereços
   para a mesma conta. Por ora, o usuário escolhe um e pode editar a conta para trocar.
 - Publicação na Play Store.
@@ -164,6 +173,60 @@ e senha, ficam em `temp/amostras/`, fora do repositório. Não versionar.
 - Celular deitado: vídeo em tela cheia.
 - Canal sem programação: o app mostra "Sem programação" em vez de ficar vazio ou travar.
 
+#### Qualidade do canal — SD/HD/FHD/4K *(dono escolheu, 2026-11-12)*
+
+- **Confirmado com dados reais do provedor do dono** (não suposição — consultado ao vivo
+  durante o brainstorming): cada canal lógico existe como várias entradas separadas no
+  catálogo (`get_live_streams`), uma por qualidade, com o nome terminando num sufixo — ex.
+  `WARNER CHANNEL FHD`, `WARNER CHANNEL HD`, `WARNER CHANNEL SD` (o SD é sempre explícito,
+  nunca "sem sufixo"). Nem todo canal tem as 4 variantes; muitos têm só 1 ou 2.
+- O app **agrupa essas entradas como um canal só** na lista. *(Decisão minha:)* a chave de
+  agrupamento é **nome-sem-sufixo + `category_id`**, não só o nome — evita juntar por engano
+  dois canais diferentes que por acaso tenham o mesmo nome-base em categorias diferentes.
+  Guarda qual `stream_id` corresponde a cada qualidade daquele canal. Favoritar afeta o
+  **canal agrupado**, não uma qualidade específica.
+- Ao abrir um canal, toca sempre a maior qualidade disponível primeiro.
+- **Troca automática** *(mecânica da cascata decidida pelo dono, 2026-11-12)*: se o vídeo
+  travar (buffer parado) por mais que um tempo configurável (padrão **8 segundos**, ajustável
+  em Configurações — abaixo), o app troca para a próxima qualidade abaixo. **O timer reinicia
+  a cada qualidade tentada** (não é um orçamento único para a cascata inteira) — no pior caso,
+  um canal com as 4 variantes pode levar uns 32s até estabilizar no SD. Um **erro definitivo**
+  do player (ex. HTTP 404, stream não encontrado, codec não suportado) troca de qualidade **na
+  hora**, sem esperar o timer de buffer. A cada troca, mostra um selo rápido na tela avisando
+  (ex. "Mudou para HD").
+- **Se até o SD falhar** (travar ou dar erro): o app **para e mostra uma mensagem de erro com
+  um botão para tentar de novo manualmente** — não fica tentando sozinho sem parar. *Por quê:*
+  a conta do provedor permite só **2 conexões simultâneas** (§3.1); um retry automático sem
+  limite arriscaria esgotar esse limite.
+- **Troca manual:** o usuário também pode escolher a qualidade a qualquer momento (inclusive
+  voltar para uma mais alta), por um seletor que só lista as qualidades que aquele canal tem.
+  *(Decisão minha:)* escolher manualmente não desliga a troca automática — só muda o ponto de
+  partida: se a qualidade escolhida também falhar, a cascata automática continua dali para
+  baixo normalmente.
+- *(Decisão minha:)* o "canal anterior/próximo" do OSD (abaixo) navega dentro da lista/filtro
+  que estava ativo na aba Canais antes de abrir o player (ex.: só dentro de Favoritos, se era
+  o filtro ativo), não sempre pela lista completa.
+- **Segundo plano** *(dono decidiu, 2026-11-12)*: ao trocar de app, bloquear a tela ou sair da
+  TV ao vivo, o vídeo/áudio **para completamente** — sem serviço em primeiro plano nem
+  notificação nesta fase. Ao voltar, reabre o canal do zero.
+
+#### Controles do player (OSD) *(dono escolheu, 2026-11-12)*
+
+- Tanto na tela dividida (em pé) quanto em tela cheia (deitado), os controles do player ficam
+  escondidos por padrão sobre o vídeo e aparecem como overlay (OSD) ao tocar na tela, somem
+  sozinhos depois de alguns segundos sem interação.
+- O OSD traz: voltar/sair, nome do canal + programa atual, o seletor de qualidade, canal
+  anterior/próximo, um atalho pra ver a grade de programação do canal atual (como overlay, sem
+  sair da tela cheia), e atalhos para "Gerenciar contas" e para "Configurações" (abaixo).
+
+#### Configurações *(tela nova, dono escolheu, 2026-11-12)*
+
+- Tela nova, fora da barra inferior (que continua só com Início/Ao vivo/Filmes/Séries — ver
+  §Navegação, acima). Por enquanto só tem o tempo de buffer/erro antes da troca automática de
+  qualidade (padrão 8s); cresce depois com mais ajustes.
+- Acessível pelo atalho no OSD do player. *(Decisão minha:)* também acessível de onde
+  "Gerenciar contas" já é hoje (tela Resumo), para quem quiser ajustar sem estar assistindo.
+
 ### Filmes e séries *(decisão minha, apresentada ao dono)*
 
 - Telas de lista por categoria, no mesmo padrão de vitrine e de lista.
@@ -181,10 +244,20 @@ Os esboços aprovados estão em `.superpowers/brainstorm/1394-1794316701/content
 - Nome do pacote Android e arquitetura interna (módulos, camadas, injeção de dependência).
 - Frequência e gatilho de atualização da lista e da programação (ex.: ao abrir, se tiver mais
   de X horas, e por um botão manual).
-- Comportamento quando o stream falha (tentar de novo, mensagem).
 - Formatos da API Xtream e do XMLTV: confirmados com o provedor real (§3.1). As amostras
   anonimizadas em `temp/amostras/` servem de base para os testes dos parsers. Elas não podem ir
   para o repositório: os testes versionados usam dados sintéticos com o mesmo formato.
+- **Algoritmo exato de agrupar qualidade por nome** (TV ao vivo, acima): a regra observada é
+  um sufixo no fim do nome (`SD`/`HD`/`FHD`/`4K`), mas confirmar contra o catálogo completo do
+  provedor se existem outras variações (`UHD`, `FULL HD`, sufixo no meio do nome, etc.) antes
+  de fechar a normalização — **[A VERIFICAR]** durante a implementação, não suposição a essa
+  altura.
+- **Confirmar se o `epg_channel_id` é o mesmo entre as variantes de qualidade do mesmo canal**
+  (a aba Programação precisa de um `epgId` só por canal agrupado) — **[A VERIFICAR]** com
+  dados reais durante a implementação.
+- Mecanismo técnico de detectar "travou" no player (Media3/ExoPlayer): estado de buffering +
+  timeout configurável, ou erro de reprodução — qual API exata do Media3 usar.
+- Schema da tabela de favoritos (entidade nova; favorita o canal agrupado, não um `stream_id`).
 
 ## 6. Fases e acompanhamento
 
@@ -192,18 +265,23 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 (dono confirmou no celular).
 
 **Fase 0 · Esqueleto e build**
-- [ ] Projeto Android + workflow do Actions que gera APK assinado e publica Release — `pendente`
-- [ ] Dono instala o APK "olá mundo" e confirma que a atualização instala por cima — `pendente`
+- [x] Projeto Android + workflow do Actions que gera APK assinado e publica Release — `validada`
+- [x] Dono instala o APK "olá mundo" e confirma que a atualização instala por cima — `validada`
 
 **Fase 1 · Contas e carga de dados**
-- [ ] Cadastro de conta Xtream (com "colar link"), várias contas e uma ativa — `pendente`
-- [ ] Carga em fluxo para o banco local (canais, filmes, séries) — `pendente`
-- [ ] Carga em fluxo da programação — `pendente`
+- [x] Cadastro de conta Xtream (com "colar link"), várias contas e uma ativa — `validada`
+- [x] Carga em fluxo para o banco local (canais, filmes, séries) — `validada`
+- [x] Carga em fluxo da programação — `validada`
 
-**Fase 2 · TV ao vivo**
-- [ ] Tela dividida com player, lista de canais e categorias — `pendente`
+**Fase 2 · TV ao vivo** (detalhe completo acima, em "TV ao vivo")
+- [ ] Tela dividida com player, lista de canais agrupados por qualidade (SD/HD/FHD/4K) e
+  categorias (incluindo Favoritos) — `pendente`
+- [ ] Troca de qualidade automática (com tempo configurável) e manual, com selo na tela — `pendente`
+- [ ] OSD do player (abre ao tocar, some sozinho): canal/programa atual, qualidade, canal
+  anterior/próximo, atalho pra grade de programação, Gerenciar contas e Configurações — `pendente`
 - [ ] Aba Programação (Ontem/Hoje/Amanhã) e programa atual na lista — `pendente`
 - [ ] Tela cheia ao deitar o celular — `pendente`
+- [ ] Tela Configurações (tempo de buffer/erro antes da troca automática, padrão 8s) — `pendente`
 
 **Fase 3 · Filmes e séries**
 - [ ] Listas por categoria, detalhes, temporadas e episódios — `pendente`
