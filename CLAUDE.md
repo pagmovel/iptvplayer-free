@@ -6,26 +6,31 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Esboços das telas: `.superpowers/brainstorm/`
 - Plano atual: [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 
-## Onde paramos (2026-11-12, tag v0.1.0 publicada; falta só o dono validar 2 itens no celular pra fechar o Plano 1)
+## Onde paramos (2026-11-12, Plano 1 inteiro `validada`; próximo é planejar o Plano 2 · TV ao vivo)
 
-- Execução do Plano 1 via **superpowers:subagent-driven-development**. **Fase 0 (build/CI/
-  assinatura) e Fase 1 (contas + carga de dados) completas e `validada`/`testada` com conta
-  real em produção** — ver tabela de acompanhamento no plano
-  (`docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md`).
+- Execução do Plano 1 via **superpowers:subagent-driven-development**. **Plano 1 completo —
+  Fase 0 (build/CI/assinatura) e Fase 1 (contas + carga de dados) — está `validada` de ponta a
+  ponta, com conta real em produção** — ver tabela de acompanhamento no plano
+  (`docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md`; linha do "Mapa dos
+  planos" também atualizada de `pendente` para `validada`).
 - **T3 passo 6 confirmado em 2026-11-12** (resposta direta do dono, não suposição): ele
   instalou a `v0.0.4` e depois a `v0.0.5` direto **por cima** da versão anterior no celular,
   sem desinstalar nenhuma vez e sem "conflito com pacote existente" — fluxo normal de
-  atualização do Android com o mesmo APK assinado. Fase 0 virou `validada`.
-- **T11 (telas de contas/resumo + worker) está com os passos 1–6 e 9 concluídos** (código já
-  commitado nos commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL` reconfirmada
-  nesta sessão com `testDebugUnitTest` e `assembleDebug`). Faltam só:
-  - **Passo 7**: publicado. Tag `v0.1.0` com sucesso (`testes`/`release` = `success`):
-    https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0.
-  - **Passo 8**: validação do dono no celular, atualizando por cima da `v0.0.5` (não mais
-    v0.0.2, que é a versão antiga citada no plano original). Os itens 1–3 (colar link,
-    salvar conta, carga sem travar com números reais) **já estão confirmados** pelos testes
-    reais da T3/T9. Faltam só os itens 4 e 5: fechar/abrir sem recarregar antes de 12 h, e
-    "Atualizar agora" com Wi-Fi desligado mostrando mensagem sem perder os números.
+  atualização do Android com o mesmo APK assinado.
+- **T11 (telas de contas/resumo + worker) completa e `validada`** — código commitado
+  (`90db6eb`/`6df4753`), suíte `BUILD SUCCESSFUL` reconfirmada nesta sessão, tag `v0.1.0`
+  publicada com sucesso (`testes`/`release` = `success`):
+  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0. Os 5 itens do passo 8
+  (validação no celular) confirmados pelo dono: colar link, salvar conta, carga sem travar
+  com números reais, **12h sem recarregar sozinho** (fechou/abriu com internet normal) e
+  **"Atualizar agora" sem rede mostrando "Aguardando conexão com a internet." sem perder os
+  números** (print real).
+- **Investigação de um falso alarme durante a validação**: o dono relatou que a tela "não
+  mudava" depois de carregar. Investigado com `superpowers:systematic-debugging` (perguntar
+  os fatos antes de supor): não era bug — a carga tinha concluído com sucesso (print com
+  "Última carga" atualizada, sem erro, números corretos); a tela de Resumo só atualiza os
+  números no próprio lugar por design, sem navegar para outra tela (não existe outra tela
+  ainda — isso é a Fase 2). Nenhuma mudança de código.
 - **Releases públicas, em ordem, cada uma com uma causa raiz real resolvida**:
   - `v0.0.1`: falhou — chave de assinatura gerada com JDK 8 local, incompatível com o
     OpenJDK 21 do `cimg/android:2026.10` (quem assina no CI). Corrigido gerando a chave
@@ -80,13 +85,11 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Fora do git, de propósito: `listas.txt` (credenciais do dono), `.env` (credenciais de
   teste), `temp/` (amostras e diagnósticos do provedor real — nunca copiar dados reais para
   testes versionados).
-- **Próxima sessão**: (1) passo 8 da T11 — pedir ao dono pra atualizar o app por cima da
-  v0.0.5 (tag `v0.1.0` já publicada) e testar os dois itens que faltam (12h sem recarregar;
-  "Atualizar agora" com Wi-Fi desligado), o que fecha o Plano 1 inteiro como `validada`; (2)
-  depois disso, **planejar a Fase 2 · TV ao vivo** (design, §2: tela dividida com player + lista de canais/categorias,
-  aba Programação Ontem/Hoje/Amanhã) — os esboços já existem em `.superpowers/brainstorm/`,
-  mas nenhum código dessa fase foi escrito ainda; é um plano novo, não uma continuação do
-  Plano 1.
+- **Próxima sessão**: **planejar o Plano 2 · TV ao vivo** (Fase 2 do design: tela dividida
+  com player + lista de canais/categorias, aba Programação Ontem/Hoje/Amanhã) — precisa de
+  brainstorming/writing-plans novo (`superpowers:brainstorming`), não é continuação deste SDD.
+  Os esboços já existem em `.superpowers/brainstorm/`, mas nenhum código dessa fase foi
+  escrito ainda.
 
 ## Regras do projeto
 

@@ -33,7 +33,7 @@ aproveitar o que se aprendeu.
 
 | Plano | Fases do design | Entrega | Estado |
 |---|---|---|---|
-| **1 · Base** (este) | 0 e 1 | build, assinatura, Releases, contas, carga do catálogo e da programação | `pendente` |
+| **1 · Base** (este) | 0 e 1 | build, assinatura, Releases, contas, carga do catálogo e da programação | `validada` |
 | 2 · TV ao vivo | 2 | tela dividida, player, canais por categoria, aba Programação, tela cheia | não escrito |
 | 3 · Filmes, séries, Início e busca | 3 e 4 | vitrine, detalhes, temporadas, progresso, busca única, favoritos | não escrito |
 | 4 · Distribuição | 5 | aviso de versão nova, README de instalação para família e amigos | não escrito |
@@ -55,7 +55,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T8 · Leitor de XMLTV | `testada` |
 | 1 | T9 · Carga do catálogo (orquestração) | `validada` (achado real pós-lançamento: `stream_id` duplicado em `get_vod_streams` quebrava com `SQLiteConstraintException`; corrigido com `OnConflictStrategy.REPLACE` — commit `b62eeb8`. **Confirmado no celular do dono com dados reais**: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas, sem erro) |
 | 1 | T10 · Contas: cofre de senha e repositório | `testada` |
-| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–7 e 9 concluídos — commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL`, tag `v0.1.0` publicada com sucesso: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0; falta só o passo 8 — dono testar no celular os itens 4 e 5 que ainda não foram confirmados) |
+| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `validada` (passos 1–9 completos — commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL`, tag `v0.1.0` publicada: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0, e os 5 itens do passo 8 confirmados pelo dono no celular, incluindo os 2 últimos — 12h sem recarregar e "Atualizar agora" sem rede com print real) |
 
 ## Restrições globais
 
@@ -605,17 +605,21 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0, anexo
   `iptv-player-free-0.1.0.apk` (9.390.406 bytes — mesmo tamanho da v0.0.5, esperado, pois
   nenhum código do app mudou entre as duas, só documentação).
-- [ ] **Passo 8: Validação pelo dono no celular,** atualizando por cima da `v0.0.5` (não mais
-  v0.0.2 — o provedor já passou por v0.0.3/v0.0.4/v0.0.5 durante a Fase 0):
-  1. Colar um dos links de `listas.txt`: os campos são preenchidos. — **já confirmado** em
-     produção com conta real durante os testes da T3/T9.
-  2. Salvar: a conta é aceita. — **já confirmado**.
-  3. Esperar a carga: ela termina sem travar a tela, e o resumo mostra números próximos de 946
-     canais, 16.122 filmes e 8.714 séries (§3.1; o provedor muda isso com o tempo). — **já
-     confirmado** (print real: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas).
-  4. Fechar e abrir: nada recarrega antes de 12 h. — **ainda não testado**.
+- [x] **Passo 8: Validação pelo dono no celular,** atualizando por cima da `v0.0.5` (não mais
+  v0.0.2 — o provedor já passou por v0.0.3/v0.0.4/v0.0.5 durante a Fase 0). **Todos os 5 itens
+  confirmados em 2026-11-12:**
+  1. Colar um dos links de `listas.txt`: os campos são preenchidos. — confirmado em produção
+     com conta real durante os testes da T3/T9.
+  2. Salvar: a conta é aceita. — confirmado.
+  3. Esperar a carga: ela termina sem travar a tela, e o resumo mostra números reais (946
+     canais, 15.896 filmes, 7.746 séries, 14.447 programas). — confirmado (print real,
+     reconfirmado de novo na própria `v0.1.0`: "Última carga: 14:36", sem erro).
+  4. Fechar e abrir: nada recarrega antes de 12 h. — **confirmado pelo dono**: fechou e abriu
+     de novo com internet normal, números continuaram sem aparecer "Atualizando".
   5. "Atualizar agora" com o Wi-Fi desligado: aparece mensagem, e os números continuam. —
-     **ainda não testado**.
+     **confirmado pelo dono** com print real: desligou a internet, apertou "Atualizar agora",
+     apareceu "Aguardando conexão com a internet." e os números (946/15896/7746/14447)
+     continuaram intactos.
 - [x] **Passo 9: Documentar.** Crie `.claude/skills/iptv-xtream-carga/SKILL.md` com o formato
   real da API, as pegadinhas (temporadas vazias, `get.php` redirecionando, tipos inconsistentes,
   ids de EPG repetidos), os acertos e como validar. Atualize as tabelas de acompanhamento deste

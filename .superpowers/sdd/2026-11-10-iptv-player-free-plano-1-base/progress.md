@@ -718,3 +718,17 @@ BASE antes da T2: `ded65b4`.
   pedir ao dono pra atualizar o app por cima da v0.0.5 e testar os itens 4 e 5 (fechar/abrir
   sem recarregar antes de 12h; "Atualizar agora" com Wi-Fi desligado mostrando mensagem sem
   perder os números já carregados).
+- **Passo 8 completo — os 2 itens que faltavam, confirmados pelo dono com evidência real:**
+  - **Item 4** (fechar/abrir sem recarregar antes de 12h): confirmado — fechou e abriu de novo
+    com internet normal, números continuaram sem aparecer "Atualizando".
+  - **Item 5** (Wi-Fi desligado + "Atualizar agora"): confirmado com print real — desligou a
+    internet, apertou o botão, apareceu "Aguardando conexão com a internet." (estado
+    `WorkInfo.State.ENQUEUED`, pela constraint `NetworkType.CONNECTED` do `CargaWorker`) e os
+    números (946 canais, 15.896 filmes, 7.746 séries, 14.447 programas) continuaram intactos na
+    tela, sem zerar.
+  - Passo 8 da T11 marcado `[x]` por inteiro. T11 vira `validada`. **T3 e T11 — as duas
+    últimas tarefas pendentes — estão `validada`. O Plano 1 inteiro (Fase 0 + Fase 1) está
+    `validada`**, linha do mapa de planos atualizada de `pendente` para `validada`.
+  - **Próximo passo real do projeto**: planejar o **Plano 2 · TV ao vivo** (Fase 2 do design) —
+    brainstorming/writing-plans novo, não é continuação deste SDD. Os esboços já existem em
+    `.superpowers/brainstorm/`.
