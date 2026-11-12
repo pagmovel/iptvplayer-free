@@ -153,11 +153,13 @@ class CatalogoDaoTest {
             programa(1, "epg1", 2000L, 2500L, "Programa B"),
             programa(1, "epg1", 1500L, 2000L, "Programa C"),
             programa(1, "epg2", 1000L, 1500L, "Outro EPG"),
+            programa(1, "epg1", 2500L, 3000L, "Programa no limite (inicio == fimMs)"),
             programa(1, "epg1", 3000L, 3500L, "Programa D (fora da janela)"),
         ))
 
         val programas = dao.programacao(1, "epg1", 1000L, 2500L)
 
+        // Janela [1000, 2500): inclui 1000, 1500, 2000, exclui 2500 (inclusive limit)
         assertEquals(3, programas.size)
         assertEquals(listOf("Programa A", "Programa C", "Programa B"), programas.map { it.titulo })
         assertEquals(listOf(1000L, 1500L, 2000L), programas.map { it.inicio })
