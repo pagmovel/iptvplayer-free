@@ -174,4 +174,30 @@ class CascataQualidadeTest {
 
         assertEquals(EventoCascata.Tocando(canal.variantes[0]), eventos.last())
     }
+
+    @Test
+    fun `escolha manual depois de falha terminal reativa a cascata automatica`() = runTest {
+        val canal = canalCom(Qualidade.HD, Qualidade.SD)
+        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
+        val eventos = coletar(cascata)
+
+        cascata.iniciar()
+        cascata.aoTravar()
+        advanceTimeBy(TEMPO_BUFFER_MS)
+        runCurrent() // HD -> SD
+        cascata.aoTravar()
+        advanceTimeBy(TEMPO_BUFFER_MS)
+        runCurrent() // SD e a pior -> FalhaTerminal
+
+        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
+
+        cascata.escolherManualmente(Qualidade.HD)
+        cascata.aoTravar()
+        advanceTimeBy(TEMPO_BUFFER_MS)
+        runCurrent()
+
+        // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
+        // ficar travada no estado terminal antigo
+        assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
+    }
 }
