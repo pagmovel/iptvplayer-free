@@ -159,6 +159,32 @@ class CascataQualidadeTest {
     }
 
     @Test
+    fun `escolha manual emite Trocou na hora com a variante escolhida`() = runTest {
+        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
+        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
+        val eventos = coletar(cascata)
+
+        cascata.iniciar()
+        cascata.escolherManualmente(Qualidade.SD)
+
+        // sem isso o player (que só reage a `eventos`) nunca trocaria de fato o que está
+        // tocando -- achado real da T9, ver comentário em escolherManualmente
+        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.SD), eventos.last())
+    }
+
+    @Test
+    fun `escolher a qualidade que ja esta tocando nao emite evento`() = runTest {
+        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
+        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
+        val eventos = coletar(cascata)
+
+        cascata.iniciar()
+        cascata.escolherManualmente(Qualidade.FHD)
+
+        assertEquals(listOf(EventoCascata.Tocando(canal.variantes[0])), eventos)
+    }
+
+    @Test
     fun `tentarNovamente apos falha terminal reinicia da maior qualidade`() = runTest {
         val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
         val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)

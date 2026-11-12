@@ -9,6 +9,7 @@ import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
 import io.github.pagmovel.iptvplayer.aovivo.CascataQualidade
 import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
 import io.github.pagmovel.iptvplayer.aovivo.PlayerAoVivo
+import io.github.pagmovel.iptvplayer.aovivo.Qualidade
 import io.github.pagmovel.iptvplayer.aovivo.agruparPorQualidade
 import io.github.pagmovel.iptvplayer.dados.CanalFavorito
 import io.github.pagmovel.iptvplayer.dados.Categoria
@@ -23,6 +24,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -47,6 +49,17 @@ fun filtrarCanais(
         (categoriaId == null || canal.categoriaId == categoriaId) &&
             (!somenteFavoritos || (canal.nomeBase to canal.categoriaId) in chavesFavoritas)
     }
+}
+
+/** Vizinho de [atual] em [canais] a [delta] posicoes (-1 anterior, +1 proximo) -- null se a
+ * lista estiver vazia, [atual] for null, [atual] nao estiver na lista (filtro mudou debaixo
+ * do pe), ou o vizinho cair fora dos limites. Nao vira de ponta a ponta (decisao da T9, ver
+ * design Sec. "TV ao vivo": dar a volta sem nenhum sinal visual seria surpreendente). */
+fun canalVizinho(canais: List<CanalAgrupado>, atual: CanalAgrupado?, delta: Int): CanalAgrupado? {
+    if (atual == null) return null
+    val indice = canais.indexOfFirst { it.nomeBase == atual.nomeBase && it.categoriaId == atual.categoriaId }
+    if (indice == -1) return null
+    return canais.getOrNull(indice + delta)
 }
 
 /** Dia da programacao mostrado na aba Programacao -- "Ontem" so serve para consulta (design
@@ -99,10 +112,15 @@ class AoVivoViewModel(private val app: AppIptv) {
     // PlayerAoVivo.kt).
     private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var cascataAtual: CascataQualidade? = null
-    private var canalAtual: CanalAgrupado? = null
     private var jobEventos: Job? = null
 
     var eventoAtual by mutableStateOf<EventoCascata?>(null)
+        private set
+
+    /** Canal selecionado agora -- publico desde a T9: o OSD mostra nome do canal e as
+     * variantes de qualidade, e [canalAnterior]/[canalProximo] precisam dele pra achar a
+     * posicao na lista filtrada atual. */
+    var canalAtual: CanalAgrupado? by mutableStateOf(null)
         private set
 
     val exoPlayer: ExoPlayer get() = playerAoVivo.exoPlayer
@@ -185,6 +203,28 @@ class AoVivoViewModel(private val app: AppIptv) {
 
     fun tentarNovamente() {
         cascataAtual?.tentarNovamente()
+    }
+
+    /** Troca de qualidade manual do OSD (T9) -- delega pra
+     * [CascataQualidade.escolherManualmente], que troca o que esta tocando na hora e deixa a
+     * automatica livre pra continuar degradando a partir daqui se essa escolha tambem falhar. */
+    fun trocarQualidadeManual(qualidade: Qualidade) {
+        cascataAtual?.escolherManualmente(qualidade)
+    }
+
+    /** Canal anterior/proximo do OSD (T9, design Sec. "TV ao vivo"): navega dentro da lista
+     * filtrada ATIVA no momento ([canaisFiltrados]), nao a lista completa sem filtro. Sem
+     * efeito se nao houver vizinho (ver [canalVizinho]). */
+    fun canalAnterior() {
+        escopo.launch {
+            canalVizinho(canaisFiltrados.first(), canalAtual, -1)?.let { selecionarCanal(it) }
+        }
+    }
+
+    fun canalProximo() {
+        escopo.launch {
+            canalVizinho(canaisFiltrados.first(), canalAtual, 1)?.let { selecionarCanal(it) }
+        }
     }
 
     /** ON_STOP (Global Constraint): pausa sem liberar o player. */

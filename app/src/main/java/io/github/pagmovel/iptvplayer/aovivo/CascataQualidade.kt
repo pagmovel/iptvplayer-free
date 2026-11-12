@@ -68,12 +68,17 @@ class CascataQualidade(
     }
 
     /** Troca manual: muda o ponto de partida sem tocar no timer; a cascata automatica
-     * continua valendo a partir daqui, mesmo que tivesse parado numa falha terminal antes. */
+     * continua valendo a partir daqui, mesmo que tivesse parado numa falha terminal antes.
+     * Emite [EventoCascata.Trocou] na hora -- achado real da T9 (OSD): sem emitir, o player
+     * (que só troca o `MediaItem` reagindo a `eventos`) nunca tocaria de fato a qualidade
+     * escolhida, o seletor manual ficaria mudo. Ignora se a qualidade pedida já é a atual. */
     fun escolherManualmente(qualidade: Qualidade) {
         val indice = canal.variantes.indexOfFirst { it.qualidade == qualidade }
-        if (indice == -1) return
+        if (indice == -1 || indice == indiceAtual) return
+        val de = varianteAtual().qualidade
         indiceAtual = indice
         falhouDeFormaTerminal = false
+        fluxoEventos.tryEmit(EventoCascata.Trocou(de, qualidade))
     }
 
     /** So tem efeito depois de [EventoCascata.FalhaTerminal]: reinicia da maior qualidade. */

@@ -43,6 +43,10 @@ fun Navegacao(app: AppIptv) {
         Tela.AO_VIVO -> AoVivoTela(
             viewModel = remember { AoVivoViewModel(app) },
             onVoltar = { tela = Tela.RESUMO },
+            onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
+            // TODO(T10): navegar pra Tela.CONFIGURACOES -- a tela ainda nao existe (escopo
+            // da T10, que vem depois desta T9).
+            onAbrirConfiguracoes = {},
         )
     }
 }

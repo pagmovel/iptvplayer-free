@@ -55,6 +55,38 @@ class AoVivoViewModelTest {
         assertEquals(emptyList<String>(), resultado.map { it.nomeBase })
     }
 
+    @Test
+    fun `canalVizinho acha o canal seguinte na lista filtrada`() {
+        val canais = listOf(canal("A", 1), canal("B", 1), canal("C", 1))
+        val resultado = canalVizinho(canais, atual = canais[0], delta = 1)
+        assertEquals("B", resultado?.nomeBase)
+    }
+
+    @Test
+    fun `canalVizinho acha o canal anterior na lista filtrada`() {
+        val canais = listOf(canal("A", 1), canal("B", 1), canal("C", 1))
+        val resultado = canalVizinho(canais, atual = canais[2], delta = -1)
+        assertEquals("B", resultado?.nomeBase)
+    }
+
+    @Test
+    fun `canalVizinho nao vira de ponta a ponta`() {
+        val canais = listOf(canal("A", 1), canal("B", 1))
+        assertNull(canalVizinho(canais, atual = canais[0], delta = -1))
+        assertNull(canalVizinho(canais, atual = canais[1], delta = 1))
+    }
+
+    @Test
+    fun `canalVizinho devolve null se o canal atual nao esta na lista filtrada`() {
+        val canais = listOf(canal("A", 1), canal("B", 1))
+        assertNull(canalVizinho(canais, atual = canal("Z", 9), delta = 1))
+    }
+
+    @Test
+    fun `canalVizinho devolve null sem canal atual`() {
+        assertNull(canalVizinho(listOf(canal("A", 1)), atual = null, delta = 1))
+    }
+
     private fun programa(inicio: Long, fim: Long) =
         Programa(contaId = 1, epgId = "epg1", inicio = inicio, fim = fim, titulo = "t-$inicio", descricao = null)
 
