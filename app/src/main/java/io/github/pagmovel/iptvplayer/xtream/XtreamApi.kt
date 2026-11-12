@@ -12,6 +12,7 @@ import kotlinx.serialization.json.decodeToSequence
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import org.xmlpull.v1.XmlPullParserException
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
@@ -78,7 +79,13 @@ class XtreamApi(
 
     suspend fun <T> abrirXmltv(ler: suspend (InputStream) -> T): T = withContext(Dispatchers.IO) {
         val corpo = executar(montarRequisicao(acao = null, caminho = "xmltv.php"), timeoutSegundos = 120)
-        corpo.byteStream().use { ler(it) }
+        try {
+            corpo.byteStream().use { ler(it) }
+        } catch (e: XmlPullParserException) {
+            throw FalhaXtream.RespostaInvalida(e.message ?: "XMLTV inválido")
+        } catch (e: IOException) {
+            throw FalhaXtream.ServidorIndisponivel(e)
+        }
     }
 
     fun urlAoVivo(streamId: Long): String =

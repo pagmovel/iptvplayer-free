@@ -10,6 +10,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.xmlpull.v1.XmlPullParserException
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class XtreamApiTest {
@@ -129,5 +131,26 @@ class XtreamApiTest {
         val lido = api.abrirXmltv { it.readBytes().decodeToString() }
 
         assertEquals("<tv><programme/></tv>", lido)
+    }
+
+    @Test
+    fun `IOException ao ler o corpo do xmltv vira ServidorIndisponivel`() = runTest {
+        // Simula a conexão caindo no meio do download do XMLTV (8,2 MB no provedor real,
+        // propenso a instabilidade de rede) — quem lê é o parser, não executar(), então essa
+        // IOException não passava pelo try/catch de executar().
+        servidor.enqueue(MockResponse().setBody("<tv><programme/></tv>"))
+
+        esperarFalha<FalhaXtream.ServidorIndisponivel> {
+            api.abrirXmltv { throw IOException("conexão perdida") }
+        }
+    }
+
+    @Test
+    fun `XmlPullParserException ao ler o corpo do xmltv vira RespostaInvalida`() = runTest {
+        servidor.enqueue(MockResponse().setBody("<tv><programme/></tv>"))
+
+        esperarFalha<FalhaXtream.RespostaInvalida> {
+            api.abrirXmltv { throw XmlPullParserException("tag inválida") }
+        }
     }
 }
