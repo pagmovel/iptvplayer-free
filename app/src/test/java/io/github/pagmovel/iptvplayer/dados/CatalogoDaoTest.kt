@@ -76,6 +76,15 @@ class CatalogoDaoTest {
         assertEquals(1, dao.contagem(2).canais)
     }
 
+    @Test fun `streamId duplicado na mesma lista nao quebra a insercao`() = runTest {
+        // Achado real: o provedor pode mandar o mesmo item duas vezes na mesma resposta de
+        // get_vod_streams (stream_id repetido) — sem REPLACE, a segunda inserção lançava
+        // SQLiteConstraintException e a carga inteira quebrava sem virar FalhaXtream.
+        dao.inserirFilmes(listOf(filme(1, "Filme A (nome antigo)"), filme(1, "Filme A (nome novo)")))
+
+        assertEquals(1, dao.contagem(1).filmes)
+    }
+
     @Test fun `contagem soma cada tipo`() = runTest {
         dao.inserirCategorias(listOf(Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes")))
         dao.inserirCanais(listOf(canal(1, "Globo HD"), canal(2, "SporTV HD")))

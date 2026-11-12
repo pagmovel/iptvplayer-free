@@ -2,6 +2,7 @@ package io.github.pagmovel.iptvplayer.dados
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 
@@ -18,16 +19,20 @@ data class Contagem(val canais: Int, val filmes: Int, val series: Int, val progr
 @Dao
 abstract class CatalogoDao {
 
-    @Insert
+    // REPLACE: o provedor real pode mandar o mesmo item duas vezes na mesma lista (achado
+    // real, T-pós-lançamento: stream_id duplicado em get_vod_streams quebrava a carga com
+    // SQLiteConstraintException, sem virar FalhaXtream — ver skill iptv-xtream-carga).
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun inserirCategorias(categorias: List<Categoria>)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun inserirCanais(canais: List<Canal>)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun inserirFilmes(filmes: List<Filme>)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun inserirSeries(series: List<Serie>)
 
     @Insert
