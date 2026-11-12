@@ -59,9 +59,15 @@ fun Osd(
 ) {
     var seloEvento by remember { mutableStateOf<EventoCascata.Trocou?>(null) }
     LaunchedEffect(eventoAtual) {
+        // Achado real da revisao: LaunchedEffect(eventoAtual) cancela esta corrotina assim
+        // que eventoAtual muda de novo -- sem o `else`, um Trocou seguido (antes do delay
+        // terminar) por null/Tocando/FalhaTerminal deixava seloEvento preso no Trocou antigo
+        // pra sempre (ex. trocar de canal com o selo de qualidade ainda visivel).
         if (eventoAtual is EventoCascata.Trocou) {
             seloEvento = eventoAtual
             delay(SELO_DURACAO_MS)
+            seloEvento = null
+        } else {
             seloEvento = null
         }
     }
