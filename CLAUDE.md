@@ -6,7 +6,7 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Esboços das telas: `.superpowers/brainstorm/`
 - Plano atual: [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 
-## Onde paramos (2026-11-12, Fase 0 e Fase 1 do Plano 1 validadas; falta só publicar a tag v0.1.0 e o dono validar no celular)
+## Onde paramos (2026-11-12, tag v0.1.0 publicada; falta só o dono validar 2 itens no celular pra fechar o Plano 1)
 
 - Execução do Plano 1 via **superpowers:subagent-driven-development**. **Fase 0 (build/CI/
   assinatura) e Fase 1 (contas + carga de dados) completas e `validada`/`testada` com conta
@@ -19,7 +19,8 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - **T11 (telas de contas/resumo + worker) está com os passos 1–6 e 9 concluídos** (código já
   commitado nos commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL` reconfirmada
   nesta sessão com `testDebugUnitTest` e `assembleDebug`). Faltam só:
-  - **Passo 7**: publicar a tag `v0.1.0` (Release final do Plano 1) — próxima ação.
+  - **Passo 7**: publicado. Tag `v0.1.0` com sucesso (`testes`/`release` = `success`):
+    https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0.
   - **Passo 8**: validação do dono no celular, atualizando por cima da `v0.0.5` (não mais
     v0.0.2, que é a versão antiga citada no plano original). Os itens 1–3 (colar link,
     salvar conta, carga sem travar com números reais) **já estão confirmados** pelos testes
@@ -79,11 +80,10 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Fora do git, de propósito: `listas.txt` (credenciais do dono), `.env` (credenciais de
   teste), `temp/` (amostras e diagnósticos do provedor real — nunca copiar dados reais para
   testes versionados).
-- **Próxima sessão**: (1) passo 7 da T11 — publicar a tag `v0.1.0` (autorização de tag já
-  liberada pelo dono, "sempre que necessitar"); (2) passo 8 — pedir ao dono pra testar no
-  celular os dois itens que faltam (12h sem recarregar; "Atualizar agora" com Wi-Fi
-  desligado), o que fecha o Plano 1 inteiro como `validada`; (3) depois disso, **planejar a
-  Fase 2 · TV ao vivo** (design, §2: tela dividida com player + lista de canais/categorias,
+- **Próxima sessão**: (1) passo 8 da T11 — pedir ao dono pra atualizar o app por cima da
+  v0.0.5 (tag `v0.1.0` já publicada) e testar os dois itens que faltam (12h sem recarregar;
+  "Atualizar agora" com Wi-Fi desligado), o que fecha o Plano 1 inteiro como `validada`; (2)
+  depois disso, **planejar a Fase 2 · TV ao vivo** (design, §2: tela dividida com player + lista de canais/categorias,
   aba Programação Ontem/Hoje/Amanhã) — os esboços já existem em `.superpowers/brainstorm/`,
   mas nenhum código dessa fase foi escrito ainda; é um plano novo, não uma continuação do
   Plano 1.

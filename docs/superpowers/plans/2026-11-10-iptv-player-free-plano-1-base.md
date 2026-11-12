@@ -55,7 +55,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T8 · Leitor de XMLTV | `testada` |
 | 1 | T9 · Carga do catálogo (orquestração) | `validada` (achado real pós-lançamento: `stream_id` duplicado em `get_vod_streams` quebrava com `SQLiteConstraintException`; corrigido com `OnConflictStrategy.REPLACE` — commit `b62eeb8`. **Confirmado no celular do dono com dados reais**: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas, sem erro) |
 | 1 | T10 · Contas: cofre de senha e repositório | `testada` |
-| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–6 e 9 concluídos e confirmados — commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL`, **tela Resumo confirmada funcionando em produção** com print real do celular; passo 6 da T3 já confirmado, falta só publicar a tag `v0.1.0` — passo 7 — e a validação final do dono — passo 8) |
+| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–7 e 9 concluídos — commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL`, tag `v0.1.0` publicada com sucesso: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0; falta só o passo 8 — dono testar no celular os itens 4 e 5 que ainda não foram confirmados) |
 
 ## Restrições globais
 
@@ -599,7 +599,12 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `BUILD SUCCESSFUL`) antes de seguir para o passo 7.
 - [x] **Passo 6: Commit.** `feat: telas de contas e resumo com carga em segundo plano`
   (commit `90db6eb`, com ajuste seguinte `6df4753` — sem conta, Resumo abre direto o formulário).
-- [ ] **Passo 7: Com o "sim" do dono,** faça push e publique a tag `v0.1.0`.
+- [x] **Passo 7: Com o "sim" do dono,** faça push e publique a tag `v0.1.0`. **Feito em
+  2026-11-12** (autorização de tag já liberada pelo dono, "sempre que necessitar"): run
+  `43267230618`, `testes = success`, `release = success`. Release publicada:
+  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0, anexo
+  `iptv-player-free-0.1.0.apk` (9.390.406 bytes — mesmo tamanho da v0.0.5, esperado, pois
+  nenhum código do app mudou entre as duas, só documentação).
 - [ ] **Passo 8: Validação pelo dono no celular,** atualizando por cima da `v0.0.5` (não mais
   v0.0.2 — o provedor já passou por v0.0.3/v0.0.4/v0.0.5 durante a Fase 0):
   1. Colar um dos links de `listas.txt`: os campos são preenchidos. — **já confirmado** em

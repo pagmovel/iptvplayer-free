@@ -700,3 +700,10 @@ BASE antes da T2: `ded65b4`.
   - **Falta real agora**: passo 7 da T11 (publicar a tag `v0.1.0`, com a autorização de tag já
     liberada pelo dono) e depois o passo 8 (pedir o teste dos itens 4-5 no celular). Só então
     o Plano 1 inteiro fecha como `validada`.
+- **Tag `v0.1.0` publicada com sucesso** (run `43267230618`): `testes = success`,
+  `release = success`. Release: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0,
+  anexo `iptv-player-free-0.1.0.apk` (9.390.406 bytes, igual à v0.0.5 — nenhum código do app
+  mudou entre as duas tags, só documentação). Passo 7 da T11 marcado `[x]`. Falta só o passo 8:
+  pedir ao dono pra atualizar o app por cima da v0.0.5 e testar os itens 4 e 5 (fechar/abrir
+  sem recarregar antes de 12h; "Atualizar agora" com Wi-Fi desligado mostrando mensagem sem
+  perder os números já carregados).
