@@ -91,6 +91,24 @@ projeto). Não é documentação genérica do Xtream Codes: são os valores **de
    posição da linha** (`Get-Content | Where-Object { não é comentário/vazio }`, pegar
    `[0]`/`[1]`/`[2]`), nunca por regex que depende do caractere acentuado bater.
 
+9. **Operadora de celular brasileira bloqueando por DNS o domínio do provedor, só em dados
+   móveis (2026-11-12, confirmado pelo dono).** O app mostrava `"Servidor não respondeu.
+   Tente outro endereço do seu provedor"` (`FalhaXtream.ServidorIndisponivel`) com dados
+   móveis, mas o mesmo servidor respondia normalmente de outra rede (testado via curl desta
+   máquina) — não era bloqueio do domínio inteiro, nem problema do app: era a operadora
+   resolvendo o domínio pra um IP que não responde (bloqueio por DNS, comum no Brasil contra
+   domínios de IPTV "pirata"). **Resolvido pelo dono trocando o DNS do aparelho** (ex.: DNS
+   público tipo 1.1.1.1/8.8.8.8 em vez do DNS da operadora). Isso é fora do controle do app —
+   não tem correção de código possível aqui, é configuração de rede do dispositivo. Ao
+   diagnosticar "servidor não respondeu" relatado por um usuário real, perguntar se é Wi-Fi
+   ou dados móveis **antes** de desconfiar do código: o mesmo servidor pode responder numa
+   rede e não responder na outra.
+   - **Pegadinha do diagnóstico em si**: testar a URL direto no navegador do celular não
+     é 100% equivalente ao app (o app usa GET, igual testado aqui, então método não é a
+     diferença) — mas um navegador pode mostrar a resposta JSON como "baixar arquivo" ou
+     texto cru em vez de erro, o que **parece** falha sem ser. O sinal real é: erro de
+     conexão/DNS (bloqueio de rede) vs. qualquer resposta chegando (servidor alcançado).
+
 ## Acertos (não desfazer sem motivo)
 
 - **Streaming em lotes, nunca a lista inteira na memória**: `XtreamApi.lerLista(acao,
