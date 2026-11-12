@@ -72,6 +72,25 @@ projeto). Não é documentação genérica do Xtream Codes: são os valores **de
 6. Servidor não tem TLS (`http://`) — por isso o manifest tem
    `android:usesCleartextTraffic="true"`; isso não é uma pegadinha a corrigir, é intencional.
 
+7. **`abrirXmltv` não convertia `IOException`/`XmlPullParserException` da leitura do corpo em
+   `FalhaXtream`** (2026-11-12, achado real em uso de verdade pelo dono: sincronizar deu
+   "Falha ao atualizar." genérico). `lerLista` já envolvia a leitura em try/catch;
+   `abrirXmltv` não. Corrigido (commit `c62d580`) envolvendo
+   `corpo.byteStream().use { ler(it) }` do mesmo jeito. **Testei contra o XMLTV real de uma
+   conta de verdade** (7,2 MB, baixado via `.env` de teste do dono) rodando `lerXmltv` direto
+   nele: 19.060 programas aceitos, 0 exceção — então XML malformado **não** era a causa nesta
+   conta especificamente; a correção cobre o outro cenário real (conexão cair no meio do
+   download de um arquivo desse tamanho em rede móvel), e qualquer causa futura agora aparece
+   como mensagem específica em vez do fallback genérico, em vez de ficar sem pista nenhuma.
+
+8. **Script PowerShell lendo chave acentuada ("usuário") de um `.env` por regex deu `404`
+   falso** — o `player_api.php` funcionava perfeitamente, mas um regex `^usuário=` no código
+   do script (não no arquivo) não bateu de forma confiável por causa de como o PowerShell 5.1
+   grava o `.ps1` temporário vs. o encoding real do `.env`, deixando `$usuario` vazio só
+   nessa chamada. **Lição: ao ler um `.env` com chave acentuada num script desses, leia por
+   posição da linha** (`Get-Content | Where-Object { não é comentário/vazio }`, pegar
+   `[0]`/`[1]`/`[2]`), nunca por regex que depende do caractere acentuado bater.
+
 ## Acertos (não desfazer sem motivo)
 
 - **Streaming em lotes, nunca a lista inteira na memória**: `XtreamApi.lerLista(acao,
