@@ -594,3 +594,24 @@ BASE antes da T2: `ded65b4`.
 - Plano (T2/T3 na tabela e passos 3-5 da T3) e CLAUDE.md atualizados para `testada`. Falta só
   o passo 6 (dono instala a `v0.0.3` no celular, depois testa atualização por cima com outra
   tag) para a Fase 0 virar `validada`.
+- **Bug real encontrado durante o passo 6**: dono cadastrou a conta (autenticação ok, erro
+  certo com senha errada) mas "sincronizar as listas" deu `"Falha ao atualizar."` genérico.
+  Sem `adb`/logcat disponíveis nesta máquina (confirmado: nenhum `adb.exe` encontrado, REA
+  também não achou o binário) para ver a exceção real do celular, investiguei pelo código:
+  `CargaWorker.doWork()` só captura `FalhaXtream`; `XtreamApi.abrirXmltv` (usado para o XMLTV,
+  8,2 MB no provedor real) não envolvia a leitura do corpo em try/catch, diferente de
+  `lerLista`, que já convertia `IOException`/`SerializationException` em `FalhaXtream`. Uma
+  `IOException` (conexão cair no meio do download) ou `XmlPullParserException` (XML
+  malformado) durante o parse escapava sem virar `FalhaXtream`, `CargaWorker` não capturava,
+  e a UI caía no fallback genérico sem pista nenhuma.
+  - Escrevi 2 testes que falham (`IOException ao ler o corpo do xmltv vira
+    ServidorIndisponivel`, `XmlPullParserException ... vira RespostaInvalida`) antes de
+    corrigir — confirmei rodando (`2 tests failed`).
+  - Corrigido envolvendo `corpo.byteStream().use { ler(it) }` em try/catch, igual ao padrão
+    de `lerLista`. Suíte completa: 45 testes, 0 falhas. Commit `c62d580`.
+  - **Não tenho certeza de que essa era a causa exata** que o dono bateu (sem logcat do
+    aparelho) — é uma lacuna real e bem fundamentada na arquitetura existente, consistente
+    com o resto do arquivo, e cobre os dois cenários mais prováveis dado que a sincronização
+    de um provedor real (rede instável, XML de 8,2 MB) é exatamente onde isso apareceria. Se
+    o próximo teste do dono falhar de novo, a mensagem agora vai dizer a causa de verdade em
+    vez do fallback genérico — isso também é diagnóstico pra próxima vez.
