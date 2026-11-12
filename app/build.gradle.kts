@@ -117,6 +117,11 @@ dependencies {
 
     implementation(libs.androidx.work.runtime)
 
+    // T6: ExoPlayer real pra TV ao vivo (PlayerAoVivo liga ele a CascataQualidade);
+    // media3-ui traz o PlayerView que a UI (T7) usa pra exibir o player.
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
 
