@@ -95,6 +95,15 @@ abstract class CatalogoDao {
     abstract suspend fun desfavoritar(contaId: Long, nomeBase: String, categoriaId: Long)
     @Query("SELECT * FROM CanalFavorito WHERE contaId = :contaId")
     abstract fun favoritos(contaId: Long): Flow<List<CanalFavorito>>
+
+    @Query("SELECT * FROM Categoria WHERE contaId = :contaId AND tipo = :tipo")
+    abstract fun categorias(contaId: Long, tipo: TipoConteudo): Flow<List<Categoria>>
+
+    @Query("SELECT * FROM Canal WHERE contaId = :contaId")
+    abstract fun canais(contaId: Long): Flow<List<Canal>>
+
+    @Query("SELECT * FROM Programa WHERE contaId = :contaId AND epgId = :epgId AND inicio >= :inicioMs AND inicio < :fimMs ORDER BY inicio ASC")
+    abstract suspend fun programacao(contaId: Long, epgId: String, inicioMs: Long, fimMs: Long): List<Programa>
 }
 
 /**

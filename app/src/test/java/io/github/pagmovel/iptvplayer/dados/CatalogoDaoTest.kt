@@ -47,6 +47,9 @@ class CatalogoDaoTest {
             sinopse = null, ano = null, nota = null, modificadaEm = null,
         )
 
+    private fun programa(contaId: Long, epgId: String, inicio: Long, fim: Long, titulo: String): Programa =
+        Programa(contaId = contaId, epgId = epgId, inicio = inicio, fim = fim, titulo = titulo, descricao = null)
+
     @Test fun `busca ignora acento e maiusculas`() = runTest {
         dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(contaId = 1, termo = "sao paulo").map { it.nome })
@@ -104,5 +107,59 @@ class CatalogoDaoTest {
 
         dao.desfavoritar(contaId = 1, nomeBase = "Globo", categoriaId = -1L)
         assertEquals(emptyList<CanalFavorito>(), dao.favoritos(1).first())
+    }
+
+    @Test fun `categorias filtra por tipo`() = runTest {
+        dao.inserirCategorias(listOf(
+            Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes"),
+            Categoria(1, TipoConteudo.AO_VIVO, 2, "Filmes"),
+            Categoria(1, TipoConteudo.FILME, 3, "Ação"),
+            Categoria(1, TipoConteudo.SERIE, 4, "Drama"),
+        ))
+
+        val aoVivos = dao.categorias(1, TipoConteudo.AO_VIVO).first()
+        assertEquals(2, aoVivos.size)
+        assertEquals(setOf(1L, 2L), aoVivos.map { it.categoriaId }.toSet())
+
+        val filmes = dao.categorias(1, TipoConteudo.FILME).first()
+        assertEquals(1, filmes.size)
+        assertEquals(3L, filmes[0].categoriaId)
+
+        val series = dao.categorias(1, TipoConteudo.SERIE).first()
+        assertEquals(1, series.size)
+        assertEquals(4L, series[0].categoriaId)
+    }
+
+    @Test fun `canais lista todos os canais da conta`() = runTest {
+        dao.inserirCanais(listOf(
+            canal(1, "Globo HD", contaId = 1),
+            canal(2, "SporTV HD", contaId = 1),
+            canal(3, "Warner HD", contaId = 1),
+            canal(4, "Outros", contaId = 2),
+        ))
+
+        val canaisConta1 = dao.canais(1).first()
+        assertEquals(3, canaisConta1.size)
+        assertEquals(setOf(1L, 2L, 3L), canaisConta1.map { it.streamId }.toSet())
+
+        val canaisConta2 = dao.canais(2).first()
+        assertEquals(1, canaisConta2.size)
+        assertEquals(4L, canaisConta2[0].streamId)
+    }
+
+    @Test fun `programacao retorna so os programas dentro da janela, ordenados`() = runTest {
+        dao.inserirProgramas(listOf(
+            programa(1, "epg1", 1000L, 1500L, "Programa A"),
+            programa(1, "epg1", 2000L, 2500L, "Programa B"),
+            programa(1, "epg1", 1500L, 2000L, "Programa C"),
+            programa(1, "epg2", 1000L, 1500L, "Outro EPG"),
+            programa(1, "epg1", 3000L, 3500L, "Programa D (fora da janela)"),
+        ))
+
+        val programas = dao.programacao(1, "epg1", 1000L, 2500L)
+
+        assertEquals(3, programas.size)
+        assertEquals(listOf("Programa A", "Programa C", "Programa B"), programas.map { it.titulo })
+        assertEquals(listOf(1000L, 1500L, 2000L), programas.map { it.inicio })
     }
 }
