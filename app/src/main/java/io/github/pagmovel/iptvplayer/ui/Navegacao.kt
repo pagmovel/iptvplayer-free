@@ -8,18 +8,20 @@ import androidx.work.WorkManager
 import io.github.pagmovel.iptvplayer.AppIptv
 import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoTela
 import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoViewModel
+import io.github.pagmovel.iptvplayer.ui.configuracoes.ConfiguracoesTela
+import io.github.pagmovel.iptvplayer.ui.configuracoes.ConfiguracoesViewModel
 import io.github.pagmovel.iptvplayer.ui.contas.ContasTela
 import io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel
 import io.github.pagmovel.iptvplayer.ui.resumo.ResumoTela
 import io.github.pagmovel.iptvplayer.ui.resumo.ResumoViewModel
 
 /**
- * Navegação manual entre as telas do app (Resumo, Contas e Ao vivo) — sem
+ * Navegação manual entre as telas do app (Resumo, Contas, Ao vivo e Configurações) — sem
  * `androidx.navigation:navigation-compose`, que o catálogo nem declara: uma troca simples de
  * estado resolve, sem precisar de rotas/back stack de uma biblioteca de navegação (ver YAGNI
  * do brief T11).
  */
-private enum class Tela { RESUMO, CONTAS, AO_VIVO }
+private enum class Tela { RESUMO, CONTAS, AO_VIVO, CONFIGURACOES }
 
 @Composable
 fun Navegacao(app: AppIptv) {
@@ -27,6 +29,8 @@ fun Navegacao(app: AppIptv) {
     // Distingue "sem conta, forçar o cadastro" (brief T11: abre direto o formulário) de
     // "usuário escolheu gerenciar contas" (não abre o formulário sozinho).
     var forcarFormulario by remember { mutableStateOf(false) }
+    // Pra onde Configurações volta -- quem a abriu, Resumo ou Ao vivo (T10, acessível dos dois).
+    var telaAntesDeConfiguracoes by remember { mutableStateOf(Tela.RESUMO) }
     val workManager = remember { WorkManager.getInstance(app) }
     when (tela) {
         Tela.RESUMO -> ResumoTela(
@@ -34,6 +38,7 @@ fun Navegacao(app: AppIptv) {
             onPrecisaDeConta = { forcarFormulario = true; tela = Tela.CONTAS },
             onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
             onAssistirAoVivo = { tela = Tela.AO_VIVO },
+            onAbrirConfiguracoes = { telaAntesDeConfiguracoes = Tela.RESUMO; tela = Tela.CONFIGURACOES },
         )
         Tela.CONTAS -> ContasTela(
             viewModel = remember { ContasViewModel(app.contasRepositorio) },
@@ -44,9 +49,11 @@ fun Navegacao(app: AppIptv) {
             viewModel = remember { AoVivoViewModel(app) },
             onVoltar = { tela = Tela.RESUMO },
             onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
-            // TODO(T10): navegar pra Tela.CONFIGURACOES -- a tela ainda nao existe (escopo
-            // da T10, que vem depois desta T9).
-            onAbrirConfiguracoes = {},
+            onAbrirConfiguracoes = { telaAntesDeConfiguracoes = Tela.AO_VIVO; tela = Tela.CONFIGURACOES },
+        )
+        Tela.CONFIGURACOES -> ConfiguracoesTela(
+            viewModel = remember { ConfiguracoesViewModel(app.configuracoes) },
+            onVoltar = { tela = telaAntesDeConfiguracoes },
         )
     }
 }

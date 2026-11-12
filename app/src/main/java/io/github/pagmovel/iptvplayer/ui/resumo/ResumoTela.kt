@@ -38,6 +38,7 @@ fun ResumoTela(
     onPrecisaDeConta: () -> Unit,
     onGerenciarContas: () -> Unit,
     onAssistirAoVivo: () -> Unit,
+    onAbrirConfiguracoes: () -> Unit,
 ) {
     var conta by remember { mutableStateOf<Conta?>(null) }
     var contagem by remember { mutableStateOf(Contagem(0, 0, 0, 0)) }
@@ -88,6 +89,7 @@ fun ResumoTela(
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onGerenciarContas) { Text("Gerenciar contas") }
         TextButton(onClick = onAssistirAoVivo) { Text("Assistir ao vivo") }
+        TextButton(onClick = onAbrirConfiguracoes) { Text("Configurações") }
     }
 }
 

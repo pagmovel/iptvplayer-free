@@ -1,5 +1,6 @@
 package io.github.pagmovel.iptvplayer.ui.aovivo
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -103,12 +105,21 @@ fun AoVivoTela(
         value = canalAtual?.let { viewModel.programaAtual(it) }
     }
 
+    // Passo 1 (T10): celular deitado = so video + OSD em tela cheia. LocalConfiguration.current
+    // ja recompoe sozinho quando a orientacao muda (sem precisar de DisposableEffect/listener
+    // proprio); como o manifest ja declara configChanges="orientation|screenSize|screenLayout"
+    // (T6), a Activity nao recria e o PlayerView/ExoPlayer nao sao recriados por isso.
+    val emPaisagem = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TextButton(onClick = onVoltar) { Text("Voltar") }
+            if (!emPaisagem) {
+                TextButton(onClick = onVoltar) { Text("Voltar") }
+            }
 
             Box(
-                Modifier.fillMaxWidth().height(220.dp).clickable(onClick = { aoTocarNaTela() }),
+                (if (emPaisagem) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(220.dp))
+                    .clickable(onClick = { aoTocarNaTela() }),
             ) {
                 AndroidView(
                     factory = { context -> PlayerView(context).apply { player = viewModel.exoPlayer } },
@@ -145,25 +156,30 @@ fun AoVivoTela(
                 )
             }
 
-            TabRow(selectedTabIndex = aba.ordinal) {
-                Tab(selected = aba == AbaAoVivo.CANAIS, onClick = { aba = AbaAoVivo.CANAIS }, text = { Text("Canais") })
-                Tab(
-                    selected = aba == AbaAoVivo.PROGRAMACAO,
-                    onClick = { aba = AbaAoVivo.PROGRAMACAO },
-                    text = { Text("Programacao") },
-                )
-            }
+            // Paisagem (Passo 1, T10): sem Voltar/abas por fora -- o Osd ja tem seu proprio
+            // "voltar", e a grade de programacao (overlay abaixo) nao depende de aba nenhuma.
+            if (!emPaisagem) {
+                TabRow(selectedTabIndex = aba.ordinal) {
+                    Tab(selected = aba == AbaAoVivo.CANAIS, onClick = { aba = AbaAoVivo.CANAIS }, text = { Text("Canais") })
+                    Tab(
+                        selected = aba == AbaAoVivo.PROGRAMACAO,
+                        onClick = { aba = AbaAoVivo.PROGRAMACAO },
+                        text = { Text("Programacao") },
+                    )
+                }
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (aba) {
-                    AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
-                    AbaAoVivo.PROGRAMACAO -> ProgramacaoAba(viewModel)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (aba) {
+                        AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
+                        AbaAoVivo.PROGRAMACAO -> ProgramacaoAba(viewModel)
+                    }
                 }
             }
         }
 
         // Grade de programacao como overlay em tela cheia (atalho do OSD, brief T9) -- reusa
-        // a ProgramacaoAba (T8) por cima de tudo, sem sair da tela de TV ao vivo.
+        // a ProgramacaoAba (T8) por cima de tudo, sem sair da tela de TV ao vivo. Independe de
+        // orientacao (Passo 1, T10): e overlay de tela cheia nos dois casos.
         if (grade) {
             Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 TextButton(onClick = { grade = false }) { Text("Fechar") }
