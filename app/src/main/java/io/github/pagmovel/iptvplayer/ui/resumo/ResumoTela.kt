@@ -33,7 +33,12 @@ import java.util.Locale
  * Sem conta ativa, [onPrecisaDeConta] leva direto para o formulário de cadastro.
  */
 @Composable
-fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGerenciarContas: () -> Unit) {
+fun ResumoTela(
+    viewModel: ResumoViewModel,
+    onPrecisaDeConta: () -> Unit,
+    onGerenciarContas: () -> Unit,
+    onAssistirAoVivo: () -> Unit,
+) {
     var conta by remember { mutableStateOf<Conta?>(null) }
     var contagem by remember { mutableStateOf(Contagem(0, 0, 0, 0)) }
     var carregando by remember { mutableStateOf(true) }
@@ -82,6 +87,7 @@ fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGeren
         Button(onClick = { viewModel.atualizarAgora(contaAtual.id) }) { Text("Atualizar agora") }
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onGerenciarContas) { Text("Gerenciar contas") }
+        TextButton(onClick = onAssistirAoVivo) { Text("Assistir ao vivo") }
     }
 }
 
