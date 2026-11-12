@@ -18,7 +18,9 @@ import okhttp3.OkHttpClient
  */
 class AppIptv : Application() {
     val banco: BancoApp by lazy {
-        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db").build()
+        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db")
+            .addMigrations(BancoApp.MIGRACAO_1_2)
+            .build()
     }
     val cofre: Cofre by lazy { CofreKeystore() }
     val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }

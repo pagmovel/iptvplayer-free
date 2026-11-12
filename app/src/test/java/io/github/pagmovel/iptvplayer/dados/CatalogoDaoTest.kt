@@ -1,6 +1,7 @@
 package io.github.pagmovel.iptvplayer.dados
 
 import androidx.room.Room
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -93,5 +94,15 @@ class CatalogoDaoTest {
         dao.inserirProgramas(listOf(Programa(1, "epg1", 1000L, 2000L, "Jornal", null)))
 
         assertEquals(Contagem(canais = 2, filmes = 1, series = 2, programas = 1), dao.contagem(1))
+    }
+
+    @Test fun `favoritar e desfavoritar um canal agrupado`() = runTest {
+        val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
+
+        dao.favoritar(favorito)
+        assertEquals(listOf(favorito), dao.favoritos(1).first())
+
+        dao.desfavoritar(contaId = 1, nomeBase = "Globo", categoriaId = -1L)
+        assertEquals(emptyList<CanalFavorito>(), dao.favoritos(1).first())
     }
 }

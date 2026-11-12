@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 
 /** Contagem de itens do catálogo de uma conta, por tipo. */
 data class Contagem(val canais: Int, val filmes: Int, val series: Int, val programas: Int)
@@ -85,6 +86,15 @@ abstract class CatalogoDao {
         if (termoFts.isEmpty()) return emptyList()
         return buscarCanaisPorTermoFts(contaId, termoFts)
     }
+
+    // REPLACE: favoritar de novo o mesmo canal (mesma chave) só atualiza criadoEm, em vez de
+    // lançar SQLiteConstraintException.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun favoritar(favorito: CanalFavorito)
+    @Query("DELETE FROM CanalFavorito WHERE contaId = :contaId AND nomeBase = :nomeBase AND categoriaId = :categoriaId")
+    abstract suspend fun desfavoritar(contaId: Long, nomeBase: String, categoriaId: Long)
+    @Query("SELECT * FROM CanalFavorito WHERE contaId = :contaId")
+    abstract fun favoritos(contaId: Long): Flow<List<CanalFavorito>>
 }
 
 /**

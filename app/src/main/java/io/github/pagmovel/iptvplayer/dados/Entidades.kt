@@ -69,6 +69,19 @@ data class Programa(
     val descricao: String?,
 )
 
+/**
+ * Canal ao vivo (agrupado por qualidade, ver [io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado])
+ * marcado como favorito por uma conta. `categoriaId` aqui nunca é `Long?`: quem chama já passa
+ * o valor normalizado por [io.github.pagmovel.iptvplayer.aovivo.chaveCategoria].
+ */
+@Entity(primaryKeys = ["contaId", "nomeBase", "categoriaId"])
+data class CanalFavorito(
+    val contaId: Long,
+    val nomeBase: String,
+    val categoriaId: Long,
+    val criadoEm: Long,
+)
+
 /** Conta Xtream cadastrada no app. `senhaCifrada` nunca guarda texto puro — ver [io.github.pagmovel.iptvplayer.conta.Cofre]. */
 @Entity
 data class Conta(

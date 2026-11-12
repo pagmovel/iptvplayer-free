@@ -78,6 +78,18 @@ android {
             it.systemProperty("robolectric.dependency.repo.id", "google-mirror")
         }
     }
+
+    // T2 (MigracaoBancoTest): schema exportado (app/schemas/) disponível no classpath do
+    // teste JVM, como resource comum (não asset Android — MigrationTestHelper dependeria de
+    // InstrumentationRegistry via AssetManager, que neste setup de unit test/Robolectric não
+    // tem o sourceSet de teste mesclado; achado real desta tarefa). O teste lê o 1.json direto
+    // e recria o schema v1 com SQL puro, depois sobe o BancoApp real (com a Migration(1, 2)
+    // registrada em AppIptv.kt) para migrar.
+    sourceSets {
+        getByName("test") {
+            resources.srcDirs("$projectDir/schemas")
+        }
+    }
 }
 
 // Esquema do Room versionado no repositório, para dar suporte a migrações nas próximas
