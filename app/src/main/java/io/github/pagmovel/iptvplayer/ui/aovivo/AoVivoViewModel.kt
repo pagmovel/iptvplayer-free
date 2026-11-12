@@ -14,6 +14,7 @@ import io.github.pagmovel.iptvplayer.dados.CanalFavorito
 import io.github.pagmovel.iptvplayer.dados.Categoria
 import io.github.pagmovel.iptvplayer.dados.Programa
 import io.github.pagmovel.iptvplayer.dados.TipoConteudo
+import java.util.Calendar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,6 +47,31 @@ fun filtrarCanais(
         (categoriaId == null || canal.categoriaId == categoriaId) &&
             (!somenteFavoritos || (canal.nomeBase to canal.categoriaId) in chavesFavoritas)
     }
+}
+
+/** Dia da programacao mostrado na aba Programacao -- "Ontem" so serve para consulta (design
+ * Sec. "TV ao vivo"). */
+enum class DiaPrograma { ONTEM, HOJE, AMANHA }
+
+/** Janela [inicio, fim) em epoch ms do dia indicado por [dia], no fuso do aparelho, a partir
+ * do instante [agora]. HOJE cobre 00:00:00.000 (inclusive) ate 00:00:00.000 do dia seguinte
+ * (exclusivo); ONTEM/AMANHA deslocam essa janela em -1/+1 dia. Usa Calendar (nao java.time)
+ * pra ficar consistente com o estilo ja usado no projeto (ver formatarData em ResumoTela.kt). */
+fun janelaDoDia(dia: DiaPrograma, agora: Long = System.currentTimeMillis()): Pair<Long, Long> {
+    val calendario = Calendar.getInstance()
+    calendario.timeInMillis = agora
+    calendario.set(Calendar.HOUR_OF_DAY, 0)
+    calendario.set(Calendar.MINUTE, 0)
+    calendario.set(Calendar.SECOND, 0)
+    calendario.set(Calendar.MILLISECOND, 0)
+    when (dia) {
+        DiaPrograma.ONTEM -> calendario.add(Calendar.DAY_OF_MONTH, -1)
+        DiaPrograma.HOJE -> Unit
+        DiaPrograma.AMANHA -> calendario.add(Calendar.DAY_OF_MONTH, 1)
+    }
+    val inicio = calendario.timeInMillis
+    calendario.add(Calendar.DAY_OF_MONTH, 1)
+    return inicio to calendario.timeInMillis
 }
 
 /**
@@ -112,6 +138,14 @@ class AoVivoViewModel(private val app: AppIptv) {
         val agora = System.currentTimeMillis()
         val programas = banco.catalogoDao().programacao(contaId, epgId, agora - JANELA_PROGRAMACAO_MS, agora + 1)
         return programaNoInstante(programas, agora)
+    }
+
+    /** Programacao do dia inteiro do canal atualmente selecionado (aba Programacao, design
+     * Sec. "TV ao vivo") -- lista vazia sem canal selecionado ou sem epgId, nunca trava. */
+    suspend fun programacaoDoDia(dia: DiaPrograma): List<Programa> {
+        val epgId = canalAtual?.epgId ?: return emptyList()
+        val (inicio, fim) = janelaDoDia(dia)
+        return banco.catalogoDao().programacao(contaId, epgId, inicio, fim)
     }
 
     fun filtrarPorCategoria(categoriaId: Long?) {

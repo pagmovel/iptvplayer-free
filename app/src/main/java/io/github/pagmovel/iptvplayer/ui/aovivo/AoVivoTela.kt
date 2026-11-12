@@ -33,8 +33,8 @@ import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
 private enum class AbaAoVivo { CANAIS, PROGRAMACAO }
 
 /**
- * Tela de TV ao vivo (brief T7, design Sec. "TV ao vivo"): player em cima, abas Canais/
- * Programacao embaixo. A aba Programacao (T8) ainda nao existe -- fica com um placeholder.
+ * Tela de TV ao vivo (briefs T7/T8, design Sec. "TV ao vivo"): player em cima, abas Canais/
+ * Programacao embaixo.
  *
  * Global Constraint (segundo plano): o video para em ON_STOP e reabre do zero em ON_START --
  * e transmissao ao vivo, nao ha posicao pra retomar. ON_DISPOSE libera o ExoPlayer de
@@ -107,7 +107,7 @@ fun AoVivoTela(viewModel: AoVivoViewModel, onVoltar: () -> Unit) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (aba) {
                 AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
-                AbaAoVivo.PROGRAMACAO -> Text("Programacao chega na T8.", Modifier.padding(16.dp))
+                AbaAoVivo.PROGRAMACAO -> ProgramacaoAba(viewModel)
             }
         }
     }
