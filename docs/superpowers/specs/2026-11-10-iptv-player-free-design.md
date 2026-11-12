@@ -252,9 +252,11 @@ Os esboços aprovados estão em `.superpowers/brainstorm/1394-1794316701/content
   provedor se existem outras variações (`UHD`, `FULL HD`, sufixo no meio do nome, etc.) antes
   de fechar a normalização — **[A VERIFICAR]** durante a implementação, não suposição a essa
   altura.
-- **Confirmar se o `epg_channel_id` é o mesmo entre as variantes de qualidade do mesmo canal**
-  (a aba Programação precisa de um `epgId` só por canal agrupado) — **[A VERIFICAR]** com
-  dados reais durante a implementação.
+- ~~Confirmar se o `epg_channel_id` é o mesmo entre as variantes de qualidade do mesmo
+  canal~~ — **já confirmado** (skill `iptv-xtream-carga`, item 4, dados reais de
+  2026-11-10): é sim o mesmo `epg_channel_id` entre as variantes (ex.: FHD e HD do mesmo
+  canal usam o mesmo id no XMLTV). A aba Programação pode usar o `epgId` de qualquer
+  variante do canal agrupado — são todos iguais.
 - Mecanismo técnico de detectar "travou" no player (Media3/ExoPlayer): estado de buffering +
   timeout configurável, ou erro de reprodução — qual API exata do Media3 usar.
 - Schema da tabela de favoritos (entidade nova; favorita o canal agrupado, não um `stream_id`).

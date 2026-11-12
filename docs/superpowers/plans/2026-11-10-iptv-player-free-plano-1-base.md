@@ -34,7 +34,7 @@ aproveitar o que se aprendeu.
 | Plano | Fases do design | Entrega | Estado |
 |---|---|---|---|
 | **1 · Base** (este) | 0 e 1 | build, assinatura, Releases, contas, carga do catálogo e da programação | `validada` |
-| 2 · TV ao vivo | 2 | tela dividida, player, canais por categoria, aba Programação, tela cheia | não escrito |
+| [2 · TV ao vivo](2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md) | 2 | tela dividida, player, canais por categoria, aba Programação, tela cheia | `pendente` (plano escrito e aprovado, execução não iniciada) |
 | 3 · Filmes, séries, Início e busca | 3 e 4 | vitrine, detalhes, temporadas, progresso, busca única, favoritos | não escrito |
 | 4 · Distribuição | 5 | aviso de versão nova, README de instalação para família e amigos | não escrito |
 

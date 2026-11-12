@@ -122,6 +122,18 @@ projeto). Não é documentação genérica do Xtream Codes: são os valores **de
      texto cru em vez de erro, o que **parece** falha sem ser. O sinal real é: erro de
      conexão/DNS (bloqueio de rede) vs. qualquer resposta chegando (servidor alcançado).
 
+10. **Vazamento real de credencial ao testar contra listas alternativas do `.env`
+    (2026-11-12)**: o `.env` tem duas seções comentadas — uma "lista de servidores" (só
+    domínio, sem credenciais) e uma ou mais "LISTA M3U N" (links `get.php` completos, **com
+    usuário/senha embutidos na URL**). Um regex `^#\s*http` pra extrair candidatos da
+    primeira seção também casou com a segunda, e o usuário/senha embutidos acabaram
+    impressos no resultado de uma ferramenta — vazamento de verdade, não quase-vazamento.
+    **Lição**: ao programaticamente extrair "servidores pra testar" de um `.env` com esse
+    formato, filtrar explicitamente por seção (ou por ausência de `username=`/`password=` na
+    linha), nunca por um regex genérico de "começa com http". E ao descrever um vazamento já
+    acontecido, nunca repetir nem um pedaço do valor vazado — citar o fato ("vazou uma
+    credencial"), não o conteúdo, nem para explicar o que houve.
+
 ## Acertos (não desfazer sem motivo)
 
 - **Streaming em lotes, nunca a lista inteira na memória**: `XtreamApi.lerLista(acao,
