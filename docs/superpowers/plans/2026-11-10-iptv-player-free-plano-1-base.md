@@ -46,16 +46,16 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | Fase | Tarefa | Estado |
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
-| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (`testes` e `release` passaram de verdade no Actions — run `43232261797`, tag `v0.0.3`) |
-| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `testada` (Release `v0.0.3` publicada de verdade; falta a validação do dono — passo 6) |
+| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `validada` (`testes`/`release` passaram de verdade em 4 tags seguidas — v0.0.3, v0.0.4, v0.0.5 — sem intervenção manual) |
+| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `testada` (Releases publicadas e instaladas de verdade no celular do dono — v0.0.3 a v0.0.5; falta só o passo 6, o teste explícito de instalar uma versão **por cima** da anterior sem desinstalar) |
 | 1 | T4 · Leitura do link do provedor | `testada` |
-| 1 | T5 · Cliente da API Xtream | `testada` |
+| 1 | T5 · Cliente da API Xtream | `validada` (achado real pós-lançamento: `abrirXmltv` não convertia `IOException`/`XmlPullParserException` em `FalhaXtream`, corrigido — commit `c62d580`; auth/categorias/listas/xmltv confirmados contra o provedor real) |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
 | 1 | T7 · Banco local (Room + FTS) | `testada` |
 | 1 | T8 · Leitor de XMLTV | `testada` |
-| 1 | T9 · Carga do catálogo (orquestração) | `testada` |
+| 1 | T9 · Carga do catálogo (orquestração) | `validada` (achado real pós-lançamento: `stream_id` duplicado em `get_vod_streams` quebrava com `SQLiteConstraintException`; corrigido com `OnConflictStrategy.REPLACE` — commit `b62eeb8`. **Confirmado no celular do dono com dados reais**: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas, sem erro) |
 | 1 | T10 · Contas: cofre de senha e repositório | `testada` |
-| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–6 e 9; passos 7–8 aguardam o dono) |
+| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–6 e 9 — **tela Resumo confirmada funcionando em produção**, print real do celular; passos 7–8, que dependem do passo 6 da T3, continuam pendentes) |
 
 ## Restrições globais
 

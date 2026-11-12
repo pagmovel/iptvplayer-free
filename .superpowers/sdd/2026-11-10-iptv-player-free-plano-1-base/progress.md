@@ -655,3 +655,26 @@ BASE antes da T2: `ded65b4`.
   15.895 filmes, 7.746 séries, 13.989 programas. Suíte completa: 46 testes, 0 falhas.
   Commit `b62eeb8`, enviado. Registrado na skill `iptv-xtream-carga` (item 4a).
 - **Próximo: dono testa de novo**, agora com uma tag nova (`v0.0.5`).
+- Tag `v0.0.5` publicada (job `release` = `success`) depois que o dono editou
+  `.claude/settings.local.json` diretamente (o harness bloqueia o Claude editar a própria
+  permissão — "Self-Modification"), adicionando `Bash(git push origin v0.0.*)`. Dono
+  autorizou ("sempre que necessitar") criar/enviar tags de versão sem perguntar a cada vez
+  daqui pra frente. Revisão de segurança automática sinalizou [MEDIUM] essa regra (mesma
+  classe de risco da anterior); reconhecida e mantida por pedido explícito do dono, já
+  ciente do risco (ele mesmo editou o arquivo).
+- **Dono confirmou no celular, com print real**: `v0.0.5` sincronizou de verdade — 946
+  canais, 15.896 filmes, 7.746 séries, 14.447 programas, sem erro. Os dois achados reais
+  pós-lançamento (DNS da operadora, `stream_id` duplicado) estão resolvidos e validados em
+  produção.
+- Dono perguntou pelas telas dos mockups (`.superpowers/brainstorm/`: busca, navegação,
+  player ao vivo, grade). Confirmei no design (`docs/superpowers/specs/...§2`): são da
+  **Fase 2 · TV ao vivo**, `pendente` — fora do escopo deste Plano 1, que vai só até T11
+  (contas + resumo). Nenhum código da Fase 2 existe ainda.
+- **Fim de sessão (2026-11-12)**: dono pediu handoff antes de compactar o contexto, e um
+  compromisso de manter toda a documentação (CLAUDE.md, plano, ledger, skills) sempre
+  sincronizada com o estado real — já é a prática seguida a sessão inteira, reafirmada
+  explicitamente. `CLAUDE.md` e o plano atualizados (tabela de acompanhamento: T2/T5/T9
+  viraram `validada` com evidência de produção). **Estado da Fase 0/1 do Plano 1**: completo
+  e funcionando de ponta a ponta, falta só o passo 6 da T3 (teste de upgrade por cima).
+  **Próximo passo real do projeto**: planejar a Fase 2 (TV ao vivo) — ainda não iniciado,
+  precisa de brainstorming/writing-plans novo, não é continuação deste SDD.
