@@ -678,3 +678,25 @@ BASE antes da T2: `ded65b4`.
   e funcionando de ponta a ponta, falta só o passo 6 da T3 (teste de upgrade por cima).
   **Próximo passo real do projeto**: planejar a Fase 2 (TV ao vivo) — ainda não iniciado,
   precisa de brainstorming/writing-plans novo, não é continuação deste SDD.
+- **Retomada após compactação (mesmo dia, 2026-11-12)**: usei `AskUserQuestion` pra resolver
+  o passo 6 da T3 sem supor — perguntei diretamente se, ao instalar a v0.0.4 e a v0.0.5, o
+  dono tinha desinstalado a versão anterior ou instalado por cima. **Resposta: instalou por
+  cima das duas vezes, sem desinstalar, sem erro de conflito de pacote.** Isso é exatamente o
+  teste que o passo 6 pedia, só que já tinha acontecido organicamente durante os testes da
+  T3/T9 — bastava perguntar em vez de repetir o teste do zero. Passo 6 marcado `[x]`, T3 virou
+  `validada`.
+  - Ao revisar a T11 pra registrar isso, achei **checkboxes desatualizados**: os passos 1-6 e
+    9 apareciam como `[ ]` no corpo da tarefa, mas o código já existe no disco
+    (`CargaWorker.kt`, `ContasTela.kt`, `ResumoTela.kt`, etc.) e os commits já tinham sido
+    feitos (`90db6eb feat: telas de contas e resumo com carga em segundo plano`, `6df4753 fix:
+    sem conta, Resumo abre direto o formulário`) — a linha-resumo da tabela já dizia `testada`,
+    só os checkboxes de dentro da tarefa é que não tinham sido marcados. Corrigido: rodei a
+    suíte completa de novo pra não confiar em memória (`testDebugUnitTest` e `assembleDebug`,
+    ambos `BUILD SUCCESSFUL`) e só depois marquei `[x]` nos passos 1-6 e 9.
+  - Passo 8 também tinha a versão errada (`v0.0.2`) — corrigido pra `v0.0.5`, e marquei os 3
+    primeiros itens como já confirmados pelos testes reais da T3/T9 (link colado, conta
+    salva, carga com números reais); os itens 4 e 5 (12h sem recarregar; "Atualizar agora"
+    com Wi-Fi desligado) continuam sem teste.
+  - **Falta real agora**: passo 7 da T11 (publicar a tag `v0.1.0`, com a autorização de tag já
+    liberada pelo dono) e depois o passo 8 (pedir o teste dos itens 4-5 no celular). Só então
+    o Plano 1 inteiro fecha como `validada`.

@@ -47,7 +47,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
 | 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `validada` (`testes`/`release` passaram de verdade em 4 tags seguidas — v0.0.3, v0.0.4, v0.0.5 — sem intervenção manual) |
-| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `testada` (Releases publicadas e instaladas de verdade no celular do dono — v0.0.3 a v0.0.5; falta só o passo 6, o teste explícito de instalar uma versão **por cima** da anterior sem desinstalar) |
+| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `validada` (Releases publicadas e instaladas de verdade no celular do dono — v0.0.3 a v0.0.5. Passo 6 confirmado pelo dono em 2026-11-12: instalou v0.0.4 e v0.0.5 **por cima** da anterior, sem desinstalar, sem "conflito com pacote existente") |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `validada` (achado real pós-lançamento: `abrirXmltv` não convertia `IOException`/`XmlPullParserException` em `FalhaXtream`, corrigido — commit `c62d580`; auth/categorias/listas/xmltv confirmados contra o provedor real) |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
@@ -55,7 +55,7 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | 1 | T8 · Leitor de XMLTV | `testada` |
 | 1 | T9 · Carga do catálogo (orquestração) | `validada` (achado real pós-lançamento: `stream_id` duplicado em `get_vod_streams` quebrava com `SQLiteConstraintException`; corrigido com `OnConflictStrategy.REPLACE` — commit `b62eeb8`. **Confirmado no celular do dono com dados reais**: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas, sem erro) |
 | 1 | T10 · Contas: cofre de senha e repositório | `testada` |
-| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–6 e 9 — **tela Resumo confirmada funcionando em produção**, print real do celular; passos 7–8, que dependem do passo 6 da T3, continuam pendentes) |
+| 1 | T11 · Telas de contas e resumo, worker e Release v0.1.0 | `testada` (passos 1–6 e 9 concluídos e confirmados — commits `90db6eb`/`6df4753`, suíte completa `BUILD SUCCESSFUL`, **tela Resumo confirmada funcionando em produção** com print real do celular; passo 6 da T3 já confirmado, falta só publicar a tag `v0.1.0` — passo 7 — e a validação final do dono — passo 8) |
 
 ## Restrições globais
 
@@ -234,10 +234,11 @@ Tarefa com ações do dono. Cada push e cada tag precisam do "sim" dele na hora.
   publicada: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.0.3 com o anexo
   `iptv-player-free-0.0.3.apk` (9.390.406 bytes — mesmo tamanho verificado localmente com
   `apksigner` antes do cadastro dos Secrets).
-- [ ] **Passo 6: Validação pelo dono:** instalar a `v0.0.3` no celular. Depois, mude o texto da
-  tela para incluir a versão seguinte, publique outra tag (com "sim") e peça que ele instale
-  **por cima**, sem desinstalar. Esperado: instala sem "conflito com pacote existente". Só então
-  a Fase 0 vira `validada`.
+- [x] **Passo 6: Validação pelo dono:** instalar a `v0.0.3` no celular, depois atualizar por
+  cima, sem desinstalar. **Confirmado em 2026-11-12** (resposta direta do dono): ele instalou
+  a `v0.0.4` e depois a `v0.0.5` direto por cima da versão anterior, sem desinstalar nenhuma
+  vez, sem "conflito com pacote existente" — o fluxo natural de atualização do Android com o
+  mesmo APK assinado funcionou normal nas duas vezes. Fase 0 vira `validada`.
 - [x] **Passo 7: Documentar.** `.claude/skills/iptv-build-assinatura/SKILL.md` criada com o
   processo de chave e Secrets, o comando do Docker, e as pegadinhas (JDK incompatível, bind
   mount do Windows, logs do Actions exigindo auth). Commit a seguir.
@@ -567,7 +568,7 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `EtapaCarga`) e falha com `mensagem` em pt-BR. Ele é enfileirado como trabalho único por conta
   (`ExistingWorkPolicy.KEEP`) e exige rede conectada. No sucesso, chama `marcarCarga`.
 
-- [ ] **Passo 1: Escrever os testes que falham.**
+- [x] **Passo 1: Escrever os testes que falham.**
 
 ```kotlin
 @Test fun `worker grava o catalogo e marca a carga`()      // Result.success(); ultimaCargaEm != null
@@ -578,9 +579,9 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   `ContaInativa` → "Conta do provedor inativa ou vencida (<status>)"; `ServidorIndisponivel` →
   "Servidor não respondeu. Tente outro endereço do seu provedor."; `RespostaInvalida` → "O
   servidor respondeu algo inesperado."
-- [ ] **Passo 2: Rodar e ver falhar.**
-- [ ] **Passo 3: Implementar o worker.**
-- [ ] **Passo 4: Implementar as telas.**
+- [x] **Passo 2: Rodar e ver falhar.**
+- [x] **Passo 3: Implementar o worker.**
+- [x] **Passo 4: Implementar as telas.**
   - **Contas:** lista das contas salvas, com a ativa marcada. Botão "Adicionar conta" abre um
     formulário com Nome, Servidor, Usuário e Senha, e com o botão **"Colar link do provedor"**,
     que lê a área de transferência com `lerLinkXtream` e preenche os 3 campos; se o link não
@@ -593,18 +594,24 @@ Base dos pacotes: `app/src/main/java/io/github/pagmovel/iptvplayer/`; testes em
   - Ao abrir o app, se `precisaAtualizar` for verdadeiro, enfileira o `CargaWorker`.
   - Use o tema escuro do Material 3, coerente com os esboços (fundo `#0f1115`, destaque
     `#4fc3f7`), com textos de pelo menos 14 sp.
-- [ ] **Passo 5: Rodar tudo.** `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`. Esperado:
-  `BUILD SUCCESSFUL`.
-- [ ] **Passo 6: Commit.** `feat: telas de contas e resumo com carga em segundo plano`.
+- [x] **Passo 5: Rodar tudo.** `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`. Esperado:
+  `BUILD SUCCESSFUL`. **Reconfirmado em 2026-11-12** (suíte completa e assemble, ambos
+  `BUILD SUCCESSFUL`) antes de seguir para o passo 7.
+- [x] **Passo 6: Commit.** `feat: telas de contas e resumo com carga em segundo plano`
+  (commit `90db6eb`, com ajuste seguinte `6df4753` — sem conta, Resumo abre direto o formulário).
 - [ ] **Passo 7: Com o "sim" do dono,** faça push e publique a tag `v0.1.0`.
-- [ ] **Passo 8: Validação pelo dono no celular,** atualizando por cima da `v0.0.2`:
-  1. Colar um dos links de `listas.txt`: os campos são preenchidos.
-  2. Salvar: a conta é aceita.
+- [ ] **Passo 8: Validação pelo dono no celular,** atualizando por cima da `v0.0.5` (não mais
+  v0.0.2 — o provedor já passou por v0.0.3/v0.0.4/v0.0.5 durante a Fase 0):
+  1. Colar um dos links de `listas.txt`: os campos são preenchidos. — **já confirmado** em
+     produção com conta real durante os testes da T3/T9.
+  2. Salvar: a conta é aceita. — **já confirmado**.
   3. Esperar a carga: ela termina sem travar a tela, e o resumo mostra números próximos de 946
-     canais, 16.122 filmes e 8.714 séries (§3.1; o provedor muda isso com o tempo).
-  4. Fechar e abrir: nada recarrega antes de 12 h.
-  5. "Atualizar agora" com o Wi-Fi desligado: aparece mensagem, e os números continuam.
-- [ ] **Passo 9: Documentar.** Crie `.claude/skills/iptv-xtream-carga/SKILL.md` com o formato
+     canais, 16.122 filmes e 8.714 séries (§3.1; o provedor muda isso com o tempo). — **já
+     confirmado** (print real: 946 canais, 15.896 filmes, 7.746 séries, 14.447 programas).
+  4. Fechar e abrir: nada recarrega antes de 12 h. — **ainda não testado**.
+  5. "Atualizar agora" com o Wi-Fi desligado: aparece mensagem, e os números continuam. —
+     **ainda não testado**.
+- [x] **Passo 9: Documentar.** Crie `.claude/skills/iptv-xtream-carga/SKILL.md` com o formato
   real da API, as pegadinhas (temporadas vazias, `get.php` redirecionando, tipos inconsistentes,
   ids de EPG repetidos), os acertos e como validar. Atualize as tabelas de acompanhamento deste
   plano e a §6 do design. Commit `docs: skill da API Xtream e da carga`.
