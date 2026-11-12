@@ -1,5 +1,6 @@
 # Credenciais e listas do provedor: nunca versionar
 listas.txt
+.env
 
 # Arquivos temporários de trabalho (script de coleta e amostras do provedor)
 temp/
