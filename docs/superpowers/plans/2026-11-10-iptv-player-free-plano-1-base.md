@@ -46,8 +46,8 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 | Fase | Tarefa | Estado |
 |---|---|---|
 | 0 | T1 · Esqueleto Gradle e testes no Docker | `testada` |
-| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (local e no Actions — job `testes` passou de verdade no push da T3; falta a Release assinada, que só roda com tag) |
-| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `pendente` |
+| 0 | T2 · Workflow do GitHub Actions (CI e Release assinada) | `testada` (`testes` e `release` passaram de verdade no Actions — run `43232261797`, tag `v0.0.3`) |
+| 0 | T3 · Chave de assinatura, Secrets e primeira Release | `testada` (Release `v0.0.3` publicada de verdade; falta a validação do dono — passo 6) |
 | 1 | T4 · Leitura do link do provedor | `testada` |
 | 1 | T5 · Cliente da API Xtream | `testada` |
 | 1 | T6 · Mapeamento do JSON Xtream para entidades | `testada` |
@@ -217,21 +217,25 @@ Tarefa com ações do dono. Cada push e cada tag precisam do "sim" dele na hora.
   atualizado com os 4 valores novos.
 - [x] **Passo 2: Conferir que nada vazou.** `git status --short` não mostra nada de `temp/`, e
   `git check-ignore -v temp/assinatura/iptv-player-free.jks` mostra a regra `temp/`.
-- [ ] **Passo 3: Guiar o dono no cadastro dos Secrets:** repositório → *Settings* → *Secrets and
-  variables* → *Actions* → *New repository secret*, uma vez para cada um dos 4 nomes. Peça a ele
-  que guarde `iptv-player-free.jks` e `valores-secrets.txt` fora do repositório (pendrive ou
-  Drive). Explique que, sem eles, as atualizações deixam de instalar por cima. **Repetição
-  necessária:** os 4 Secrets já tinham sido cadastrados com a chave antiga (incompatível);
-  precisam ser **atualizados** com os novos valores.
+- [x] **Passo 3: Guiar o dono no cadastro dos Secrets.** Os 4 Secrets foram cadastrados com a
+  chave antiga (incompatível) antes da correção do passo 1, e **atualizados pelo dono** com os
+  valores novos em 2026-11-12 (confirmado pelo "Last updated" de cada um na página de Secrets:
+  os 4 mostravam "now"/poucos minutos antes do teste da tag `v0.0.3`).
 - [x] **Passo 4: Com o "sim" do dono,** faça `git push -u origin main`. Esperado: job `testes`
   verde no Actions. Confirmado: run #1 (`43083373024`), `testes` = `success`, `release` =
   `skipped` (correto — só roda em tag).
-- [ ] **Passo 5: Com o "sim" do dono,** crie e envie a tag `v0.0.1`. Esperado: Release `v0.0.1`
-  com `iptv-player-free-0.0.1.apk`. **Primeira tentativa (run `43088431682`) falhou de verdade**
-  no job `release` pela chave incompatível do passo 1 — nenhuma Release chegou a ser publicada
-  (confirmado: `GET /releases/tags/v0.0.1` → 404). Repetir após os Secrets serem atualizados.
-- [ ] **Passo 6: Validação pelo dono:** instalar a `v0.0.1` no celular. Depois, mude o texto da
-  tela para "IPTV Player Free · v0.0.2", publique a `v0.0.2` (com "sim") e peça que ele instale
+- [x] **Passo 5: Com o "sim" do dono,** crie e envie a tag. **Histórico real das tentativas:**
+  `v0.0.1` (run `43088431682`) falhou no job `release` pela chave incompatível do passo 1 —
+  nenhuma Release publicada (404 em `/releases/tags/v0.0.1`). `v0.0.2` (run `43097855518`)
+  ficou presa em `queued` por um outage real da plataforma GitHub (confirmado em
+  `githubstatus.com`); mesmo depois do outage resolvido o run não saiu do estado e nem o
+  "Cancel workflow" da UI funcionou — ficou órfã, sem Release. **`v0.0.3` (run
+  `43232261797`) passou de verdade**: `testes` = `success`, `release` = `success`. Release
+  publicada: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.0.3 com o anexo
+  `iptv-player-free-0.0.3.apk` (9.390.406 bytes — mesmo tamanho verificado localmente com
+  `apksigner` antes do cadastro dos Secrets).
+- [ ] **Passo 6: Validação pelo dono:** instalar a `v0.0.3` no celular. Depois, mude o texto da
+  tela para incluir a versão seguinte, publique outra tag (com "sim") e peça que ele instale
   **por cima**, sem desinstalar. Esperado: instala sem "conflito com pacote existente". Só então
   a Fase 0 vira `validada`.
 - [x] **Passo 7: Documentar.** `.claude/skills/iptv-build-assinatura/SKILL.md` criada com o

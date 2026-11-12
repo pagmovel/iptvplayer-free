@@ -562,3 +562,35 @@ BASE antes da T2: `ded65b4`.
   da T3); (2) se falhou por `Password is not ASCII` de novo, é sinal de que os Secrets ainda
   não foram atualizados com os valores novos — pedir pro dono atualizar e tentar outra tag
   com novo "sim"; (3) se passou, seguir pro passo 6 (validação do dono instalando no celular).
+
+## Retomada em 2026-11-12
+
+- Confirmado por `githubstatus.com/api/v2/incidents/unresolved.json`: o outage de ontem
+  **já estava resolvido** ("sem incidentes não resolvidos"). Mesmo assim, o run `43097855518`
+  (tag `v0.0.2`) continuava `queued` — órfão de verdade, não só "fila normal".
+- Pedi pro dono cancelar manualmente na UI do Actions. Ele tentou e a própria UI do GitHub
+  devolveu **"Failed to cancel workflow"** — confirma que o run ficou preso do lado do
+  GitHub, sem solução possível do nosso lado (sem token/`gh` pra forçar via API). Decisão:
+  abandonar esse run (não consome runner, não bloqueia nada) e seguir com uma tag nova.
+- **Confusão real que vale registrar**: pedi pro dono conferir o run da tag, ele mandou
+  print de um run DIFERENTE (`#6`, disparado pelo push do commit de handoff `0695a65` no
+  `main`, não pela tag `v0.0.2`) e disse "não estava travada" — o run do print realmente
+  tinha passado bem, mas não era o que eu tinha perguntado. Conferi de novo pela API com o
+  ID exato (`43097855518`) e mandei o link direto pro dono, em vez de insistir on a mesma
+  pergunta genérica — isso resolveu a confusão.
+- **Pendência do "Secrets atualizados?" resolvida com evidência, não memória**: perguntei nas
+  duas sessões e o dono achou que já tinha respondido ("eu já tinha cadastrado os 4 secrets
+  em outro momento, esqueceu?"). Expliquei a diferença real: cadastro inicial (com a chave
+  quebrada) foi antes de eu regenerar a chave dentro do container (16:57 de 11/11,
+  confirmado pelo `LastWriteTime` do arquivo); o que faltava confirmar era uma ATUALIZAÇÃO
+  depois desse horário. Dono conferiu a coluna "Last updated" dos 4 Secrets na própria
+  página do GitHub (print) e todos mostravam "now"/1-2 minutos antes — ele tinha acabado de
+  atualizar. Fato verificável, não "ele disse que sim".
+- Com o "sim" do dono, criei e enviei a tag **`v0.0.3`** (run `43232261797`). Passou de
+  verdade: `testes = success`, `release = success`. **Primeira Release pública do projeto**:
+  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.0.3, anexo
+  `iptv-player-free-0.0.3.apk` (9.390.406 bytes — bate exatamente com o tamanho verificado
+  localmente ontem via `apksigner verify` antes do cadastro dos Secrets).
+- Plano (T2/T3 na tabela e passos 3-5 da T3) e CLAUDE.md atualizados para `testada`. Falta só
+  o passo 6 (dono instala a `v0.0.3` no celular, depois testa atualização por cima com outra
+  tag) para a Fase 0 virar `validada`.
