@@ -58,6 +58,19 @@ projeto). Não é documentação genérica do Xtream Codes: são os valores **de
    não está implementado no código — é um achado de exploração (design §3.1), não um
    comportamento já coberto por teste.
 
+4a. **`stream_id` duplicado em `get_vod_streams` (confirmado 2026-11-12, conta real do dono,
+   causa raiz de verdade de "Falha ao atualizar.", não só desconfiança)**: o provedor pode
+   mandar o mesmo filme duas vezes na mesma resposta. `CatalogoDao.inserirFilmes` usava
+   `@Insert` padrão (ABORT) — a segunda inserção lançava `SQLiteConstraintException` (UNIQUE
+   constraint em `contaId, streamId`), que **não é `FalhaXtream`**, escapa do catch do
+   `CargaWorker`, e a tela cai no fallback genérico sem pista nenhuma. Reproduzido de ponta a
+   ponta contra o servidor real (autentica, carrega categorias/canais, quebra nos filmes).
+   Corrigido trocando os 4 inserts do catálogo (categorias/canais/filmes/séries) para
+   `OnConflictStrategy.REPLACE`. **Lição maior**: qualquer `@Insert`/`@Update` do catálogo
+   que grave dado vindo direto do provedor precisa tolerar duplicata — não assuma que uma
+   chave que "deveria" ser única (`stream_id`, `series_id`, `category_id`) é única de
+   verdade na resposta real. Teste de regressão em `CatalogoDaoTest`.
+
 4. **Ids de EPG repetidos no XMLTV**: o mesmo `epg_channel_id` aparece em mais de um `<channel>`
    do XMLTV (ex.: a versão FHD e a versão HD do mesmo canal usam o mesmo id). Hoje isso não
    quebra nada porque `Programa` grava por `(contaId, epgId, inicio)` e aceita duplicata entre

@@ -638,3 +638,20 @@ BASE antes da T2: `ded65b4`.
   https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.0.4,
   `iptv-player-free-0.0.4.apk` (9.390.406 bytes). **Próximo: dono testa a sincronização de
   novo no celular com essa versão.**
+- **`v0.0.4` ainda deu "Falha ao atualizar."** — dono confirmou DNS já corrigido (dados
+  móveis) e app atualizado de verdade. Causa raiz real encontrada reproduzindo a carga
+  completa contra o servidor real (não um mock): escrevi um teste descartável que roda
+  `CargaCatalogo.executar()` com o `XtreamApi` real e Room real (Robolectric), usando as
+  credenciais do `.env`. Capturou: `android.database.sqlite.SQLiteConstraintException:
+  UNIQUE constraint failed: Filme.contaId, Filme.streamId` — o provedor manda `stream_id`
+  duplicado em `get_vod_streams`; `CatalogoDao.inserirFilmes` usava `@Insert` padrão (ABORT);
+  a exceção não é `FalhaXtream`, escapa do `CargaWorker`, cai no fallback genérico. Bate com
+  o relato do dono (progresso avança por todas as etapas — a transação só desfaz depois —
+  e falha "no final").
+- Corrigido trocando os 4 inserts do catálogo (categorias/canais/filmes/séries) para
+  `OnConflictStrategy.REPLACE`. Teste de regressão sintético em `CatalogoDaoTest`
+  (`streamId duplicado na mesma lista nao quebra a insercao`). **Reconfirmei de ponta a
+  ponta contra o servidor real** após a correção: carga completa sem exceção — 946 canais,
+  15.895 filmes, 7.746 séries, 13.989 programas. Suíte completa: 46 testes, 0 falhas.
+  Commit `b62eeb8`, enviado. Registrado na skill `iptv-xtream-carga` (item 4a).
+- **Próximo: dono testa de novo**, agora com uma tag nova (`v0.0.5`).
