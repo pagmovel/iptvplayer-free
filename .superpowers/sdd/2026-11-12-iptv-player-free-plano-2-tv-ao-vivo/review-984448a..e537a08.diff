@@ -1,0 +1,197 @@
+# Review package: 984448a11daa0216caa1595f8af79dfc731128dc..HEAD
+
+## Commits
+e537a08 feat: agrupa canais por qualidade SD/HD/FHD/4K
+
+## Files changed
+ .../pagmovel/iptvplayer/aovivo/CanalAgrupado.kt    | 75 ++++++++++++++++
+ .../iptvplayer/aovivo/CanalAgrupadoTest.kt         | 99 ++++++++++++++++++++++
+ 2 files changed, 174 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt
+new file mode 100644
+index 0000000..77ff518
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt
+@@ -0,0 +1,75 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import io.github.pagmovel.iptvplayer.dados.Canal
++
++enum class Qualidade(val rotulo: String) {
++    SD("SD"),
++    HD("HD"),
++    FHD("FHD"),
++    QUATRO_K("4K"),
++}
++
++data class VarianteQualidade(val qualidade: Qualidade, val streamId: Long)
++
++data class CanalAgrupado(
++    val nomeBase: String,
++    val categoriaId: Long,
++    val icone: String?,
++    val epgId: String?,
++    val numero: Int?,
++    val variantes: List<VarianteQualidade>,
++)
++
++fun chaveCategoria(categoriaId: Long?): Long {
++    return categoriaId ?: -1L
++}
++
++fun qualidadeDoNome(nome: String): Qualidade? {
++    val regex = Regex("""(?i)\s+(4K|FHD|HD|SD)$""")
++    val match = regex.find(nome)
++    return match?.let {
++        when (it.groupValues[1].uppercase()) {
++            "SD" -> Qualidade.SD
++            "HD" -> Qualidade.HD
++            "FHD" -> Qualidade.FHD
++            "4K" -> Qualidade.QUATRO_K
++            else -> null
++        }
++    }
++}
++
++fun nomeBase(nome: String): String {
++    val regex = Regex("""(?i)\s+(4K|FHD|HD|SD)$""")
++    return nome.replace(regex, "")
++}
++
++fun agruparPorQualidade(canais: List<Canal>): List<CanalAgrupado> {
++    // Agrupar por (nomeBase, categoriaId normalizada)
++    val agrupados = canais.groupBy { canal ->
++        Pair(nomeBase(canal.nome), chaveCategoria(canal.categoriaId))
++    }
++
++    return agrupados.map { (chave, grupoCanais) ->
++        val (nome, categoriaId) = chave
++
++        // Usar os valores do primeiro canal do grupo (são do mesmo canal lógico)
++        val primeiro = grupoCanais.first()
++
++        // Criar variantes ordenadas da maior pra menor qualidade
++        val variantes = grupoCanais
++            .map { canal ->
++                val qualidade = qualidadeDoNome(canal.nome) ?: Qualidade.SD
++                VarianteQualidade(qualidade, canal.streamId)
++            }
++            .sortedByDescending { it.qualidade.ordinal }
++
++        CanalAgrupado(
++            nomeBase = nome,
++            categoriaId = categoriaId,
++            icone = primeiro.icone,
++            epgId = primeiro.epgId,
++            numero = primeiro.numero,
++            variantes = variantes
++        )
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt
+new file mode 100644
+index 0000000..8f615a9
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt
+@@ -0,0 +1,99 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import io.github.pagmovel.iptvplayer.dados.Canal
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class CanalAgrupadoTest {
++
++    @Test
++    fun `agrupa variantes do mesmo canal pelo nome-sem-sufixo e categoria`() {
++        // 3 Canal sintéticos: "CANAL TESTE FHD", "CANAL TESTE HD", "CANAL TESTE SD", mesma categoriaId.
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL TESTE FHD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL TESTE HD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++            Canal(contaId = 1, streamId = 3, nome = "CANAL TESTE SD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(1, resultado.size)
++        val agrupado = resultado[0]
++        assertEquals("CANAL TESTE", agrupado.nomeBase)
++        assertEquals(10, agrupado.categoriaId)
++        assertEquals("icone.png", agrupado.icone)
++        assertEquals("epg1", agrupado.epgId)
++        assertEquals(1, agrupado.numero)
++        assertEquals(3, agrupado.variantes.size)
++        // variantes ordenadas de maior pra menor: FHD, HD, SD
++        assertEquals(Qualidade.FHD, agrupado.variantes[0].qualidade)
++        assertEquals(1L, agrupado.variantes[0].streamId)
++        assertEquals(Qualidade.HD, agrupado.variantes[1].qualidade)
++        assertEquals(2L, agrupado.variantes[1].streamId)
++        assertEquals(Qualidade.SD, agrupado.variantes[2].qualidade)
++        assertEquals(3L, agrupado.variantes[2].streamId)
++    }
++
++    @Test
++    fun `canais com nome-base igual em categorias diferentes nao se misturam`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL X HD", categoriaId = 1, icone = null, epgId = null, numero = null),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL X HD", categoriaId = 2, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(2, resultado.size)
++        assertEquals("CANAL X", resultado[0].nomeBase)
++        assertEquals(1, resultado[0].categoriaId)
++        assertEquals("CANAL X", resultado[1].nomeBase)
++        assertEquals(2, resultado[1].categoriaId)
++    }
++
++    @Test
++    fun `categoriaId nulo normaliza para -1 sem colidir com categoria real -1`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL Y HD", categoriaId = null, icone = null, epgId = null, numero = null),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL Y HD", categoriaId = -1L, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        // Ambos normalizam pra -1L, então viram 1 CanalAgrupado só
++        assertEquals(1, resultado.size)
++        assertEquals("CANAL Y", resultado[0].nomeBase)
++        assertEquals(-1L, resultado[0].categoriaId)
++        assertEquals(2, resultado[0].variantes.size)
++    }
++
++    @Test
++    fun `canal sem sufixo de qualidade reconhecido vira grupo de 1 variante`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL SEM SUFIXO", categoriaId = 10, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(1, resultado.size)
++        val agrupado = resultado[0]
++        assertEquals("CANAL SEM SUFIXO", agrupado.nomeBase)
++        assertEquals(1, agrupado.variantes.size)
++        // Canal sem sufixo reconhecido entra como Qualidade.SD (pior caso)
++        assertEquals(Qualidade.SD, agrupado.variantes[0].qualidade)
++        assertEquals(1L, agrupado.variantes[0].streamId)
++    }
++
++    @Test
++    fun `qualidadeDoNome reconhece os 4 sufixos, case-insensitive`() {
++        assertEquals(Qualidade.SD, qualidadeDoNome("X SD"))
++        assertEquals(Qualidade.SD, qualidadeDoNome("x sd"))
++        assertEquals(Qualidade.HD, qualidadeDoNome("X HD"))
++        assertEquals(Qualidade.HD, qualidadeDoNome("x hd"))
++        assertEquals(Qualidade.FHD, qualidadeDoNome("X FHD"))
++        assertEquals(Qualidade.FHD, qualidadeDoNome("x fhd"))
++        assertEquals(Qualidade.QUATRO_K, qualidadeDoNome("X 4K"))
++        assertEquals(Qualidade.QUATRO_K, qualidadeDoNome("x 4k"))
++        // Sem sufixo reconhecido
++        assertEquals(null, qualidadeDoNome("X SEM SUFIXO"))
++    }
++}

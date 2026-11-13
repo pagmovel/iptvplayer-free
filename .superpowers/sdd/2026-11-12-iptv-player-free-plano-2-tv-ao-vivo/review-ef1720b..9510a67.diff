@@ -1,0 +1,256 @@
+# Review package: ef1720b..HEAD
+
+## Commits
+9510a67 test: cobre transicao FalhaTerminal -> escolha manual na cascata
+
+## Files changed
+ .../task-5-report.md                               | 197 +++++++++++++++++++++
+ .../iptvplayer/aovivo/CascataQualidadeTest.kt      |  26 +++
+ 2 files changed, 223 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md
+new file mode 100644
+index 0000000..7cb3a97
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md
+@@ -0,0 +1,197 @@
++# T5: Cascata de qualidade (maquina de estados pura) -- relatorio
++
++## O que foi implementado
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt`
++  - `sealed class EventoCascata` com `Tocando`, `Trocou` e `FalhaTerminal`, exatamente como
++    especificado no brief.
++  - `class CascataQualidade(canal, tempoBufferMs, escopo)` com `eventos: Flow<EventoCascata>`
++    (backing: `MutableSharedFlow(extraBufferCapacity = 16)`), `iniciar()`, `aoTravar()`,
++    `aoEstabilizar()`, `aoErroDefinitivo()`, `escolherManualmente(qualidade)`,
++    `tentarNovamente()`.
++  - `canal.variantes` (contrato de T1) ja vem ordenada da maior pra menor; descer qualidade
++    e so avancar `indiceAtual` em 1, e a pior e `variantes.lastIndex`. Nao precisou de
++    caso especial para canal de 1 variante: com `indiceAtual == lastIndex == 0`, a mesma
++    checagem de "ja estava na pior" cobre o caso sozinha.
++  - Timer: `aoTravar()` cancela o `Job` anterior (se houver) e lanca um novo
++    `escopo.launch { delay(tempoBufferMs); descerQualidade() }` -- isso e o "reinicia o
++    timer". `aoEstabilizar()` so cancela, sem lancar nada. `aoErroDefinitivo()` cancela o
++    timer pendente e desce na hora, sem delay.
++  - Estado terminal: `falhouDeFormaTerminal` vira `true` dentro de `descerQualidade()` quando
++    nao ha mais pra onde descer; `aoTravar()`/`aoErroDefinitivo()` ficam no-op enquanto esse
++    flag estiver ligado. So `tentarNovamente()` (que exige o flag ligado) ou
++    `escolherManualmente()` desligam o flag de novo.
++  - Decisao nao coberta por nenhum dos testes literais, mas exigida pela restricao global do
++    plano ("a cascata automatica continua valendo a partir da escolha manual"):
++    `escolherManualmente()` zera `falhouDeFormaTerminal`. Sem isso, escolher manualmente uma
++    qualidade depois de uma `FalhaTerminal` deixaria `aoTravar()`/`aoErroDefinitivo()` presos
++    no estado terminal antigo, contradizendo a regra. Nao escrevi um teste extra pra isso
++    porque nao estava nos 9 (rectius 8, ver secao abaixo) testes literais do brief -- fica
++    registrado aqui pra quem revisar.
++
++- `app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt`: os 8
++  testes do brief (ver contagem abaixo), usando `runTest` + `advanceTimeBy` +
++  `runCurrent()` pra controlar o tempo virtual, e um collector em
++  `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler))` pra inscrever no
++  `SharedFlow` antes de qualquer emissao (sem isso o `tryEmit` nao tem pra quem entregar e o
++  evento se perde -- achado real, ver secao de achados).
++
++## Divergencia de contagem: brief tem 8 testes, nao 9
++
++O meu prompt de tarefa diz "os 9 testes literais" e o checklist de autorrevisao diz "os 9
++testes do brief". Contei `@Test fun` no arquivo
++`.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-brief.md` de forma
++programatica (regex sobre o arquivo inteiro, nao so visualmente) e da **8**, nao 9. Os 8 sao
++exatamente os 8 que implementei (lista na secao de evidencia abaixo), incluindo os dois casos
++especiais citados no checklist ("canal com 1 variante" e "escolha manual nao desliga a
++automatica"). A soma final da suite completa (58 + 8 = 66, confirmada abaixo) tambem bate com
++8 testes novos, nao 9 -- entao nao ha teste faltando, so um erro de contagem no prompt. Nao
++inventei um 9o teste pra fechar o numero porque isso seria suposicao; reportando o fato em vez
++de adivinhar.
++
++## Achado real durante TDD: `advanceTimeBy` sozinho nao executa a tarefa agendada exatamente no novo tempo
++
++Na primeira rodada (RED que eu esperava ver, mas que so apareceu depois de eu ja ter escrito
++a implementacao -- ver nota de processo abaixo), 4 dos 8 testes falharam porque o evento
++emitido de dentro do `escopo.launch { delay(tempoBufferMs); ... }` nunca chegava no
++collector: `eventos.last()` continuava sendo o `Tocando` do `iniciar()`. Causa raiz (API do
++`kotlinx-coroutines-test` 1.11.0, nao suposicao -- confirmado rodando e comparando antes/depois
++da correcao): `advanceTimeBy(delta)` avanca o relogio virtual mas NAO garante executar a
++tarefa agendada exatamente no novo instante; precisa de um `runCurrent()` depois pra essa
++tarefa de borda rodar. Corrigi acrescentando `runCurrent()` apos cada `advanceTimeBy(...)` no
++teste (nao mudei a implementacao) e os 8 passaram.
++
++## Nota de processo: nao vi o RED antes de implementar
++
++O brief pede Passo 1 (escrever testes, ver falhar) antes do Passo 3 (implementar). Escrevi os
++dois arquivos (teste + implementacao) em sequencia sem rodar o build entre eles, entao o
++primeiro `gradle testDebugUnitTest --tests '*CascataQualidadeTest'` que rodei ja tinha os dois
++lados prontos -- a "falha" que vi (4 de 8) foi real (veio do achado do `advanceTimeBy` acima,
++nao de implementacao faltando), mas nao e o RED limpo que o TDD pede (teste falhando por
++ausencia de implementacao). Registro isso porque e desvio do processo pedido, nao porque
++mudou o resultado: a implementacao em si nunca foi alterada por causa dos 4 testes que
++falharam -- so o teste (que precisava do `runCurrent()`) mudou.
++
++## Evidencia GREEN dos 8 testes (apos a correcao do `runCurrent()`)
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest --tests '*CascataQualidadeTest'`
++Resultado: `BUILD SUCCESSFUL`, 0 testes falhando, 8 de 8 passando:
++
++1. `inicia sempre na maior qualidade disponivel`
++2. `trava por mais que o tempo configurado desce uma qualidade e reinicia o timer`
++3. `travar por menos que o tempo configurado nao troca`
++4. `erro definitivo troca na hora, sem esperar o timer`
++5. `canal com 1 variante so vai direto pra falha terminal ao travar`
++6. `se a pior qualidade tambem falhar, emite falha terminal e para`
++7. `escolha manual muda a variante sem desligar a cascata automatica`
++8. `tentarNovamente apos falha terminal reinicia da maior qualidade`
++
++## Suite completa real (sem filtro `--tests`)
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest`
++Resultado: `BUILD SUCCESSFUL`.
++
++Contagem real, somando os XML de `app/build/test-results/testDebugUnitTest/TEST-*.xml`
++(13 arquivos de suite, campo `tests`/`failures`/`errors` de cada um, somados
++programaticamente, nao de leitura visual do console -- o gradle so imprime falhas, nao o
++total):
++
++- **Total: 66 testes. Falhas: 0. Erros: 0. Pulados: 0.**
++- 58 (linha de base antes desta tarefa, citada no prompt) + 8 (novos desta tarefa) = 66. Bate.
++
++## Arquivos alterados
++
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt`
++- Novo: `app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt`
++
++Nenhum outro arquivo do repositorio foi tocado. Os demais arquivos nao commitados que
++apareciam no `git status` (plano, briefs/relatorios de T1-T4, `.vsix`) sao de tarefas
++anteriores/do dono do projeto e ficaram de fora deste commit, por nao serem desta tarefa.
++
++## Autorrevisao (checklist do prompt)
++
++- Os 8 testes literais do brief estao todos implementados, incluindo "canal com 1 variante
++  so vai direto pra falha terminal" e "escolha manual nao desliga a automatica": **sim**, ver
++  lista acima -- (nota: sao 8, nao 9; ver secao de divergencia de contagem).
++- O timer reinicia a cada `aoTravar()` (cancela o job anterior, nao acumula): **sim** --
++  `aoTravar()` faz `timerJob?.cancel()` antes de lancar um novo `Job`; coberto pelo teste 2
++  (metade do tempo apos reiniciar nao e suficiente).
++- `aoErroDefinitivo()` troca na hora, sem `advanceTimeBy` nenhum no teste correspondente:
++  **sim** -- teste 4 nao tem nenhuma chamada a `advanceTimeBy`.
++- Depois de `FalhaTerminal`, nenhum evento `Trocou` sai sem um `tentarNovamente()` explicito:
++  **sim** -- teste 6 chama `aoTravar()` + `advanceTimeBy` de novo depois do `FalhaTerminal` e
++  confirma que o tamanho da lista de eventos nao mudou (guard `falhouDeFormaTerminal` em
++  `aoTravar()`/`aoErroDefinitivo()`).
++- Rodou a suite completa real (nao so a classe focada) e tem a contagem real pra reportar:
++  **sim** -- 66 testes, 0 falhas (secao acima).
++
++## Duvidas / preocupacoes
++
++1. **Divergencia de contagem 8 vs 9** (secao dedicada acima) -- nao bloqueante, mas sinalizo
++   porque o prompt e o checklist citam "9" e o brief (fonte oficial) tem 8.
++2. **`escolherManualmente()` zera `falhouDeFormaTerminal`**: decisao minha, justificada pela
++   restricao global do plano, mas sem teste literal cobrindo esse ramo especifico (ver secao
++   de implementacao). Se o controlador quiser um teste explicito pra essa combinacao
++   (FalhaTerminal -> escolherManualmente -> aoTravar consegue agir de novo), posso
++   acrescentar.
++3. Warnings de compilacao (`This declaration needs opt-in ... ExperimentalCoroutinesApi`) para
++   `UnconfinedTestDispatcher`, `backgroundScope`, `runCurrent`, etc. Sao so warnings (build
++   passa), e nao ha convencao no repo (`@OptIn` ou `freeCompilerArgs`) pra suprimir -- deixei
++   como estao por minimalismo; nenhum teste existente no projeto suprime esses warnings.
++
++## Correcao pos-revisao (rodada 2): teste da transicao FalhaTerminal -> escolha manual
++
++**Achado do revisor (Importante):** nenhum dos 8 testes originais exercitava chamar
++`escolherManualmente()` com `falhouDeFormaTerminal` ja `true` (ou seja, depois de um
++`FalhaTerminal`), pra provar que a automatica volta a agir a partir dai em vez de ficar presa
++no estado terminal antigo. O controlador avaliou e confirmou: a implementacao
++(`escolherManualmente()` zerar o flag) esta correta, so faltava o teste -- nao mudei
++`CascataQualidade.kt`.
++
++**O que mudou:** um `@Test` novo em `CascataQualidadeTest.kt`:
++
++```kotlin
++@Test
++fun `escolha manual depois de falha terminal reativa a cascata automatica`() = runTest {
++    val canal = canalCom(Qualidade.HD, Qualidade.SD)
++    val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++    val eventos = coletar(cascata)
++
++    cascata.iniciar()
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent() // HD -> SD
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent() // SD e a pior -> FalhaTerminal
++
++    assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++
++    cascata.escolherManualmente(Qualidade.HD)
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent()
++
++    // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
++    // ficar travada no estado terminal antigo
++    assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
++}
++```
++
++Canal com 2 variantes (HD, SD) leva a `FalhaTerminal` em 2 ciclos de `aoTravar()`; depois
++`escolherManualmente(HD)` volta o indice pro topo e zera o flag terminal; o `aoTravar()`
++seguinte degrada de novo (HD -> SD), provando que a cascata nao ficou travada.
++
++**Comando e saida -- teste focado:**
++`./scripts/gradle.ps1 testDebugUnitTest --tests '*CascataQualidadeTest'` -> `BUILD
++SUCCESSFUL`. Confirmado via XML
++(`app/build/test-results/testDebugUnitTest/TEST-io.github.pagmovel.iptvplayer.aovivo.CascataQualidadeTest.xml`):
++**9 testes, 0 falhas, 0 erros** (os 8 anteriores + o novo).
++
++**Comando e saida -- suite completa real (sem filtro):**
++`./scripts/gradle.ps1 testDebugUnitTest` -> `BUILD SUCCESSFUL`. Soma programatica dos 13 XML
++em `app/build/test-results/testDebugUnitTest/`: **67 testes, 0 falhas, 0 erros** (66 da
++rodada anterior + 1 novo). Bate.
++
++**Commit desta correcao:** `test: cobre transicao FalhaTerminal -> escolha manual na
++cascata` (ver SHA no relatorio final enviado ao controlador).
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+index 579b0ca..2ea0828 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+@@ -167,11 +167,37 @@ class CascataQualidadeTest {
+         cascata.iniciar()
+         cascata.escolherManualmente(Qualidade.SD)
+         cascata.aoTravar()
+         advanceTimeBy(TEMPO_BUFFER_MS)
+         runCurrent() // FalhaTerminal
+ 
+         cascata.tentarNovamente()
+ 
+         assertEquals(EventoCascata.Tocando(canal.variantes[0]), eventos.last())
+     }
++
++    @Test
++    fun `escolha manual depois de falha terminal reativa a cascata automatica`() = runTest {
++        val canal = canalCom(Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // HD -> SD
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // SD e a pior -> FalhaTerminal
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++
++        cascata.escolherManualmente(Qualidade.HD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
++        // ficar travada no estado terminal antigo
++        assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
++    }
+ }

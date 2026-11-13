@@ -1,0 +1,335 @@
+# Review package: c7a9050c987729abc104befb098e35a08cb697dd..HEAD
+
+## Commits
+e87e1a0 feat: tela de TV ao vivo -- aba Programacao
+
+## Files changed
+ .../pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt    |  6 +-
+ .../iptvplayer/ui/aovivo/AoVivoViewModel.kt        | 34 +++++++++
+ .../iptvplayer/ui/aovivo/ProgramacaoAba.kt         | 85 ++++++++++++++++++++++
+ .../iptvplayer/ui/aovivo/AoVivoViewModelTest.kt    | 46 +++++++++++-
+ 4 files changed, 165 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+index a3e82c9..d7c3b86 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+@@ -26,22 +26,22 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.viewinterop.AndroidView
+ import androidx.lifecycle.Lifecycle
+ import androidx.lifecycle.LifecycleEventObserver
+ import androidx.media3.ui.PlayerView
+ import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
+ 
+ private enum class AbaAoVivo { CANAIS, PROGRAMACAO }
+ 
+ /**
+- * Tela de TV ao vivo (brief T7, design Sec. "TV ao vivo"): player em cima, abas Canais/
+- * Programacao embaixo. A aba Programacao (T8) ainda nao existe -- fica com um placeholder.
++ * Tela de TV ao vivo (briefs T7/T8, design Sec. "TV ao vivo"): player em cima, abas Canais/
++ * Programacao embaixo.
+  *
+  * Global Constraint (segundo plano): o video para em ON_STOP e reabre do zero em ON_START --
+  * e transmissao ao vivo, nao ha posicao pra retomar. ON_DISPOSE libera o ExoPlayer de
+  * verdade, pra nao vazar ao sair da tela.
+  */
+ @Composable
+ fun AoVivoTela(viewModel: AoVivoViewModel, onVoltar: () -> Unit) {
+     var carregando by remember { mutableStateOf(true) }
+     var aba by remember { mutableStateOf(AbaAoVivo.CANAIS) }
+ 
+@@ -100,15 +100,15 @@ fun AoVivoTela(viewModel: AoVivoViewModel, onVoltar: () -> Unit) {
+             Tab(
+                 selected = aba == AbaAoVivo.PROGRAMACAO,
+                 onClick = { aba = AbaAoVivo.PROGRAMACAO },
+                 text = { Text("Programacao") },
+             )
+         }
+ 
+         Box(Modifier.weight(1f).fillMaxWidth()) {
+             when (aba) {
+                 AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
+-                AbaAoVivo.PROGRAMACAO -> Text("Programacao chega na T8.", Modifier.padding(16.dp))
++                AbaAoVivo.PROGRAMACAO -> ProgramacaoAba(viewModel)
+             }
+         }
+     }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+index 82d3093..8d40743 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+@@ -7,20 +7,21 @@ import androidx.media3.exoplayer.ExoPlayer
+ import io.github.pagmovel.iptvplayer.AppIptv
+ import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
+ import io.github.pagmovel.iptvplayer.aovivo.CascataQualidade
+ import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
+ import io.github.pagmovel.iptvplayer.aovivo.PlayerAoVivo
+ import io.github.pagmovel.iptvplayer.aovivo.agruparPorQualidade
+ import io.github.pagmovel.iptvplayer.dados.CanalFavorito
+ import io.github.pagmovel.iptvplayer.dados.Categoria
+ import io.github.pagmovel.iptvplayer.dados.Programa
+ import io.github.pagmovel.iptvplayer.dados.TipoConteudo
++import java.util.Calendar
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.combine
+ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.launch
+@@ -41,20 +42,45 @@ fun filtrarCanais(
+     categoriaId: Long?,
+     somenteFavoritos: Boolean,
+ ): List<CanalAgrupado> {
+     val chavesFavoritas = favoritos.map { it.nomeBase to it.categoriaId }.toSet()
+     return canais.filter { canal ->
+         (categoriaId == null || canal.categoriaId == categoriaId) &&
+             (!somenteFavoritos || (canal.nomeBase to canal.categoriaId) in chavesFavoritas)
+     }
+ }
+ 
++/** Dia da programacao mostrado na aba Programacao -- "Ontem" so serve para consulta (design
++ * Sec. "TV ao vivo"). */
++enum class DiaPrograma { ONTEM, HOJE, AMANHA }
++
++/** Janela [inicio, fim) em epoch ms do dia indicado por [dia], no fuso do aparelho, a partir
++ * do instante [agora]. HOJE cobre 00:00:00.000 (inclusive) ate 00:00:00.000 do dia seguinte
++ * (exclusivo); ONTEM/AMANHA deslocam essa janela em -1/+1 dia. Usa Calendar (nao java.time)
++ * pra ficar consistente com o estilo ja usado no projeto (ver formatarData em ResumoTela.kt). */
++fun janelaDoDia(dia: DiaPrograma, agora: Long = System.currentTimeMillis()): Pair<Long, Long> {
++    val calendario = Calendar.getInstance()
++    calendario.timeInMillis = agora
++    calendario.set(Calendar.HOUR_OF_DAY, 0)
++    calendario.set(Calendar.MINUTE, 0)
++    calendario.set(Calendar.SECOND, 0)
++    calendario.set(Calendar.MILLISECOND, 0)
++    when (dia) {
++        DiaPrograma.ONTEM -> calendario.add(Calendar.DAY_OF_MONTH, -1)
++        DiaPrograma.HOJE -> Unit
++        DiaPrograma.AMANHA -> calendario.add(Calendar.DAY_OF_MONTH, 1)
++    }
++    val inicio = calendario.timeInMillis
++    calendario.add(Calendar.DAY_OF_MONTH, 1)
++    return inicio to calendario.timeInMillis
++}
++
+ /**
+  * Estado e acoes da tela de TV ao vivo -- mesma observacao de
+  * [io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel] sobre nao ser um
+  * `androidx.lifecycle.ViewModel`.
+  *
+  * [carregar] resolve a conta ativa e monta o [PlayerAoVivo] -- so precisa ser chamado uma vez
+  * (a conta ativa nao muda durante a sessao da tela); so depois dele os `Flow`s de categorias/
+  * favoritos/canais ficam disponiveis (ver [AoVivoTela]).
+  */
+ class AoVivoViewModel(private val app: AppIptv) {
+@@ -107,20 +133,28 @@ class AoVivoViewModel(private val app: AppIptv) {
+     }
+ 
+     /** Programa no ar agora no canal, ou null se nao tem EPG ou a janela nao tem nada no ar. */
+     suspend fun programaAtual(canal: CanalAgrupado): Programa? {
+         val epgId = canal.epgId ?: return null
+         val agora = System.currentTimeMillis()
+         val programas = banco.catalogoDao().programacao(contaId, epgId, agora - JANELA_PROGRAMACAO_MS, agora + 1)
+         return programaNoInstante(programas, agora)
+     }
+ 
++    /** Programacao do dia inteiro do canal atualmente selecionado (aba Programacao, design
++     * Sec. "TV ao vivo") -- lista vazia sem canal selecionado ou sem epgId, nunca trava. */
++    suspend fun programacaoDoDia(dia: DiaPrograma): List<Programa> {
++        val epgId = canalAtual?.epgId ?: return emptyList()
++        val (inicio, fim) = janelaDoDia(dia)
++        return banco.catalogoDao().programacao(contaId, epgId, inicio, fim)
++    }
++
+     fun filtrarPorCategoria(categoriaId: Long?) {
+         filtroCategoria.value = categoriaId
+     }
+ 
+     fun filtrarFavoritos(somente: Boolean) {
+         filtroSomenteFavoritos.value = somente
+     }
+ 
+     suspend fun favoritar(canal: CanalAgrupado) {
+         banco.catalogoDao().favoritar(
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt
+new file mode 100644
+index 0000000..a5fad61
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt
+@@ -0,0 +1,85 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.produceState
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import io.github.pagmovel.iptvplayer.dados.Programa
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++
++/**
++ * Aba "Programacao" da tela de TV ao vivo (brief T8, design Sec. "TV ao vivo"): seletor
++ * Ontem/Hoje/Amanha e a programacao do dia inteiro do canal atualmente selecionado --
++ * "Sem programacao" tanto por canal sem EPG quanto por janela sem nenhum programa.
++ */
++@Composable
++fun ProgramacaoAba(viewModel: AoVivoViewModel) {
++    var dia by remember { mutableStateOf(DiaPrograma.HOJE) }
++    val programas by produceState(initialValue = emptyList<Programa>(), dia) {
++        value = viewModel.programacaoDoDia(dia)
++    }
++
++    Column(Modifier.fillMaxSize()) {
++        LazyRow(
++            Modifier.fillMaxWidth().padding(8.dp),
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.ONTEM,
++                    onClick = { dia = DiaPrograma.ONTEM },
++                    label = { Text("Ontem") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.HOJE,
++                    onClick = { dia = DiaPrograma.HOJE },
++                    label = { Text("Hoje") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.AMANHA,
++                    onClick = { dia = DiaPrograma.AMANHA },
++                    label = { Text("Amanha") },
++                )
++            }
++        }
++
++        if (programas.isEmpty()) {
++            Text("Sem programacao.", Modifier.padding(16.dp))
++        }
++
++        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
++            items(programas, key = { it.inicio }) { programa ->
++                ListItem(
++                    headlineContent = { Text(programa.titulo) },
++                    supportingContent = { Text(formatarHorario(programa.inicio, programa.fim)) },
++                )
++            }
++        }
++    }
++}
++
++private fun formatarHorario(inicioMs: Long, fimMs: Long): String {
++    val formato = SimpleDateFormat("HH:mm", Locale("pt", "BR"))
++    return "${formato.format(Date(inicioMs))} - ${formato.format(Date(fimMs))}"
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+index d53d0f6..cece5fd 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+@@ -1,24 +1,25 @@
+ package io.github.pagmovel.iptvplayer.ui.aovivo
+ 
+ import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
+ import io.github.pagmovel.iptvplayer.aovivo.Qualidade
+ import io.github.pagmovel.iptvplayer.aovivo.VarianteQualidade
+ import io.github.pagmovel.iptvplayer.dados.CanalFavorito
+ import io.github.pagmovel.iptvplayer.dados.Programa
++import java.util.Calendar
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertNull
+ import org.junit.Test
+ 
+-/** So a logica propria da T7 (filtro de canais e escolha do programa no ar) -- o resto de
+- * [AoVivoViewModel] so repassa chamadas pra DAO/repositorios/cascata/player, ja cobertos
+- * pelos testes deles (T1/T2/T3/T5/T6). */
++/** So a logica propria da T7 (filtro de canais e escolha do programa no ar) e da T8 (janela
++ * do dia da programacao) -- o resto de [AoVivoViewModel] so repassa chamadas pra DAO/
++ * repositorios/cascata/player, ja cobertos pelos testes deles (T1/T2/T3/T5/T6). */
+ class AoVivoViewModelTest {
+ 
+     private fun canal(nomeBase: String, categoriaId: Long) = CanalAgrupado(
+         nomeBase = nomeBase,
+         categoriaId = categoriaId,
+         icone = null,
+         epgId = null,
+         numero = null,
+         variantes = listOf(VarianteQualidade(Qualidade.SD, 1L)),
+     )
+@@ -68,11 +69,50 @@ class AoVivoViewModelTest {
+     fun `programaNoInstante devolve null quando o ultimo programa da janela ja terminou`() {
+         val programas = listOf(programa(0, 100), programa(100, 200))
+         val resultado = programaNoInstante(programas, agora = 250)
+         assertNull(resultado)
+     }
+ 
+     @Test
+     fun `programaNoInstante devolve null para lista vazia`() {
+         assertNull(programaNoInstante(emptyList(), agora = 150))
+     }
++
++    private fun calendarEm(ano: Int, mes: Int, dia: Int, hora: Int, minuto: Int): Long {
++        val calendario = Calendar.getInstance()
++        calendario.set(ano, mes, dia, hora, minuto, 0)
++        calendario.set(Calendar.MILLISECOND, 0)
++        return calendario.timeInMillis
++    }
++
++    @Test
++    fun `janelaDoDia HOJE cobre de 00h00 a 00h00 do dia seguinte`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.HOJE, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia ONTEM desloca a janela um dia pra tras`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.ONTEM, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 11, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia AMANHA desloca a janela um dia pra frente`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.AMANHA, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 14, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia funciona perto da virada do dia (23h59)`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 23, 59)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.HOJE, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), fim)
++    }
+ }

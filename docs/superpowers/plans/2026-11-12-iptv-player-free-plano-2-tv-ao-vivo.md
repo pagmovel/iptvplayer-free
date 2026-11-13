@@ -89,16 +89,16 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç�
 
 | Tarefa | Descrição | Estado |
 |---|---|---|
-| T1 | Agrupamento de canais por qualidade (SD/HD/FHD/4K) | `pendente` |
-| T2 | Favoritos: migração do Room + DAO | `pendente` |
-| T3 | Consultas do catálogo para a tela Ao Vivo (categorias, canais, programação) | `pendente` |
-| T4 | Configurações: tempo de buffer | `pendente` |
-| T5 | Cascata de qualidade (máquina de estados pura) | `pendente` |
-| T6 | Player Media3/ExoPlayer | `pendente` |
-| T7 | Tela Ao Vivo — aba Canais | `pendente` |
-| T8 | Tela Ao Vivo — aba Programação | `pendente` |
-| T9 | OSD do player | `pendente` |
-| T10 | Tela cheia ao deitar + navegação + Release v0.2.0 | `pendente` |
+| T1 | Agrupamento de canais por qualidade (SD/HD/FHD/4K) | `testada` |
+| T2 | Favoritos: migração do Room + DAO | `testada` |
+| T3 | Consultas do catálogo para a tela Ao Vivo (categorias, canais, programação) | `testada` |
+| T4 | Configurações: tempo de buffer | `testada` |
+| T5 | Cascata de qualidade (máquina de estados pura) | `testada` |
+| T6 | Player Media3/ExoPlayer | `testada` |
+| T7 | Tela Ao Vivo — aba Canais | `testada` |
+| T8 | Tela Ao Vivo — aba Programação | `testada` |
+| T9 | OSD do player | `testada` |
+| T10 | Tela cheia ao deitar + navegação + Release v0.2.0 | `testada` (revisão final + fix wave completos; tag v0.2.0 pendente) |
 | T11 | Validação do dono no celular, contra o provedor real | `pendente` |
 
 ---

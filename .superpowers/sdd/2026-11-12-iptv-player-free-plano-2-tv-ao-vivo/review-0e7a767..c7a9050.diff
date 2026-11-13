@@ -1,0 +1,808 @@
+# Review package: 0e7a7676a51c613f70e2ea06ba0c31c57485ab8b..HEAD
+
+## Commits
+c7a9050 feat: tela de TV ao vivo -- aba Canais
+
+## Files changed
+ .../task-7-report.md                               | 134 ++++++++++++++++
+ .../io/github/pagmovel/iptvplayer/ui/Navegacao.kt  |  17 +-
+ .../pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt    | 114 ++++++++++++++
+ .../iptvplayer/ui/aovivo/AoVivoViewModel.kt        | 172 +++++++++++++++++++++
+ .../pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt     | 152 ++++++++++++++++++
+ .../pagmovel/iptvplayer/ui/resumo/ResumoTela.kt    |   8 +-
+ .../iptvplayer/ui/aovivo/AoVivoViewModelTest.kt    |  78 ++++++++++
+ 7 files changed, 669 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md
+new file mode 100644
+index 0000000..9c75e8f
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md
+@@ -0,0 +1,134 @@
++# T7: Tela Ao Vivo — aba Canais
++
++## O que foi implementado
++
++- `AoVivoViewModel` (`ui/aovivo/AoVivoViewModel.kt`): resolve a conta ativa e monta o
++  `PlayerAoVivo` em `carregar()` (suspend, chamado uma vez pela tela); expõe `categorias`,
++  `favoritos` e `canaisFiltrados` (Flows montados uma única vez dentro de `carregar()`, não
++  como `get()` computada — ver "Decisões de integração" abaixo); `selecionarCanal`,
++  `favoritar`/`desfavoritar`, `filtrarPorCategoria`/`filtrarFavoritos`, `tentarNovamente`,
++  `pausar`/`retomar`, `liberar`, `programaAtual(canal)`.
++- `CanaisAba` (`ui/aovivo/CanaisAba.kt`): chips Todos/Favoritos/categorias (seleção única),
++  lista de `CanalAgrupado` com nome, ícone (sempre "nome sobre fundo neutro — ver decisão
++  abaixo), estrela de favorito e o programa atual via `produceState` por linha.
++- `AoVivoTela` (`ui/aovivo/AoVivoTela.kt`): `AndroidView`/`PlayerView` ligado a
++  `viewModel.exoPlayer`, overlay de erro + "Tentar de novo" só em `FalhaTerminal`, `TabRow`
++  Canais/Programação (Programação com placeholder — T8 não existe ainda), observador de
++  ciclo de vida (`DisposableEffect` + `LifecycleEventObserver`) chamando
++  `pausar`/`retomar`/`liberar`, e um botão "Voltar" (decisão minha, ver abaixo).
++- `Navegacao.kt`: `Tela.AO_VIVO` novo, `ResumoTela` ganhou `onAssistirAoVivo`.
++- `ResumoTela.kt`: botão "Assistir ao vivo" ao lado de "Gerenciar contas".
++- Teste: `AoVivoViewModelTest.kt` (7 casos) cobrindo as duas peças de lógica própria não
++  triviais que extraí como funções puras (ver abaixo) — o resto do ViewModel só repassa
++  chamadas pra DAO/repositórios/cascata/player, já cobertos pelos testes de T1/T2/T3/T5/T6.
++
++## Decisões de integração
++
++1. **Onde o `PlayerAoVivo` é montado**: dentro de `AoVivoViewModel.carregar()` (suspend),
++   chamado de um `LaunchedEffect(viewModel)` em `AoVivoTela` — igual ao padrão de
++   `ResumoTela.LaunchedEffect(Unit) { ... }`. Resolve a conta ativa
++   (`banco.contaDao().ativa()`), decifra as credenciais (`contasRepositorio.credenciais`),
++   monta `api = app.criarApi(cred)` e constrói `PlayerAoVivo(app) { streamId ->
++   api.urlAoVivo(streamId) }` (`AppIptv` é `Context`, serve direto). Só roda uma vez (campo
++   `lateinit`), como o brief pediu.
++2. **Os `Flow`s (`categorias`/`favoritos`/`canaisFiltrados`) são campos `lateinit`
++   atribuídos uma única vez dentro de `carregar()`, não propriedades `get()` computadas.**
++   Cheguei a desenhar com `get()` (reavaliado a cada acesso), mas isso criaria uma instância
++   nova de `Flow` (do `combine(...)`) a cada recomposição que lê a propriedade — o
++   `collectAsState` do Compose re-assinaria do zero a cada recomposição em vez de manter a
++   mesma inscrição. Campo fixo, montado uma vez, resolve sem precisar de
++   `remember`/`flatMapLatest`.
++3. **`programaAtual` não usa `inicio < fimMs` sozinho para achar "o que está no ar".** A
++   lógica pura que extraí (`programaNoInstante`) checa `inicio <= agora && fim > agora` —
++   não só `fim > agora`. Achado real ao escrever o teste: com `lastOrNull { it.fim > agora
++   }` sozinho, uma lista com um programa futuro (`inicio > agora`) no fim da lista "vence"
++   por estar depois na ordem, mesmo sem ainda ter começado. Na consulta real
++   (`programacao(contaId, epgId, agora-24h, agora+1)`) isso não aconteceria (a query já
++   filtra `inicio < agora+1`), mas a função pura ficou correta independente de quem chama,
++   em vez de depender da janela de quem chama estar sempre certa.
++4. **Ícone do canal: sempre "nome sobre fundo neutro", nunca carrega `canal.icone` de
++   verdade.** *(ponytail, decisão minha, comentário no código em `CanaisAba.kt`)* — o
++   projeto não tem Coil/Glide nem nenhuma lib de imagem ainda, e adicionar uma só para isto
++   seria escopo novo fora do brief. O próprio brief permite esse fallback ("ícone (ou nome
++   sobre fundo neutro, mesma regra do design)"), então usei sempre o fallback. Troca por
++   `AsyncImage` fácil quando uma lib de imagem entrar no projeto.
++5. **Chips Todos/Favoritos/categoria são seleção única** (design: "chips de categoria
++   (incluindo Favoritos e Todos)"), não toggles independentes — escolher uma reseta as
++   outras duas. `AoVivoViewModel.filtrarPorCategoria`/`filtrarFavoritos` continuam expostos
++   como ações independentes (o brief pediu assim); quem garante a exclusividade é a UI
++   (`CanaisAba`), chamando os dois setters juntos a cada clique de chip.
++6. **Botão "Voltar" em `AoVivoTela`** — não estava no brief (que só define o `TabRow` e o
++   player), mas sem ele a tela ficaria sem saída (o OSD completo do design, com
++   voltar/sair, é escopo de uma tarefa futura). Mesmo padrão simples de `TextButton` que
++   `ContasTela`/`ResumoTela` já usam.
++7. **Badge "Mudou para HD" do design não foi implementado** — o brief pede só o overlay de
++   `FalhaTerminal` com "Tentar de novo"; o selo de troca automática (evento `Trocou`) é
++   extra do design não listado nos passos do brief. Deixei de fora (ponytail/YAGNI) — fácil
++   de acrescentar depois com um `Snackbar`/toast reagindo a `eventoAtual`.
++8. **Aba "Programação" é um placeholder de texto** ("Programação chega na T8.") — T8 não
++   existe ainda; o `TabRow` já liga certo pra quando ela chegar.
++
++## Evidência de build/testes
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`.
++
++- 1ª rodada: `AoVivoViewModelTest > programaNoInstante acha o programa cujo fim ainda nao
++  passou FAILED` (74 testes, 1 falha) — bug real na minha primeira versão de
++  `programaNoInstante` (só `fim > agora`, sem checar `inicio <= agora`), achado pelo próprio
++  teste que escrevi. Corrigido (item 3 acima).
++- 2ª rodada: **`BUILD SUCCESSFUL`**, **74 testes, 0 falhas** (67 pré-existentes + 7 novos em
++  `AoVivoViewModelTest`), `assembleDebug` concluído.
++- Confirmado por contagem real nos XML de `app/build/test-results/testDebugUnitTest/`: soma
++  de `tests=` entre os 14 arquivos = 74, soma de `failures=` = 0.
++- Avisos de depreciação (não erros): `LocalLifecycleOwner` (compose-ui) e `TabRow`
++  (material3) têm substitutos mais novos (`lifecycle-runtime-compose`,
++  `PrimaryTabRow`/`SecondaryTabRow`); usei as versões atuais porque são as já presentes nas
++  dependências do projeto (sem adicionar lib nova) — não é bloqueio.
++
++## Arquivos alterados
++
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt`
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt`
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt`
++- Novo: `app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt`
++- Modificado: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt`
++- Modificado: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt`
++
++## Autorrevisão (perguntas do brief)
++
++- **Os 7 passos do brief foram implementados?** Sim.
++- **`AoVivoTela` mostra erro + "Tentar de novo" só em `FalhaTerminal`, nunca tenta
++  sozinha?** Sim — o overlay só aparece quando `viewModel.eventoAtual ==
++  EventoCascata.FalhaTerminal`, e a única chamada a `tentarNovamente()` é o `onClick` desse
++  botão.
++- **Vídeo para em `ON_STOP` e reabre do zero em `ON_START`?** Sim — `pausar()` chama
++  `exoPlayer.pause()` (não libera nada); `retomar()` chama `selecionarCanal(canalAtual)` de
++  novo, que cria uma `CascataQualidade` nova e reabre o `MediaItem` do zero (não é retomar
++  posição).
++- **`ON_DISPOSE` libera o player de verdade?** Sim — o `onDispose` do `DisposableEffect`
++  chama `viewModel.liberar()`, que chama `playerAoVivo.liberar()` (cancela o escopo interno
++  do `PlayerAoVivo` e `exoPlayer.release()`) e cancela o escopo próprio do ViewModel.
++- **A navegação segue o padrão exato de `Navegacao.kt`?** Sim — mesmo `when` sobre um
++  `enum class Tela` privado, mesma forma de `remember { ViewModel(...) }` por tela.
++- **`tempoBufferMs()` é lido a cada `selecionarCanal`, não uma vez só?** Sim —
++  `app.configuracoes.tempoBufferMs()` é chamado dentro de `selecionarCanal`, ao montar cada
++  `CascataQualidade` nova.
++- **`categoriaId` normalizado antes de favoritar/desfavoritar?** Sim, e sem normalização
++  extra: `CanalAgrupado.categoriaId` já é o valor normalizado por `chaveCategoria` (contrato
++  de T1 — `agruparPorQualidade` monta o `CanalAgrupado` com `categoriaId = chaveCategoria(...)`),
++  então `favoritar`/`desfavoritar` em `AoVivoViewModel` usam `canal.categoriaId` direto, sem
++  risco de passar um `Long?` cru.
++
++## Dúvidas/preocupações
++
++- Itens 6–8 de "Decisões de integração" são escopo que acrescentei ou deixei de fora por
++  decisão própria (ponytail/YAGNI), não pedidos explícitos do brief — sinalizando para
++  quem revisar, caso o dono prefira o OSD completo ou o selo de troca já nesta tarefa.
++- Esta tarefa não tem teste automatizado de Compose (mesmo padrão do Plano 1 — ver T11).
++  Validação real da UI (chips, estrela, cascata visível na tela, pausa/retomada ao trocar
++  de app) depende de teste manual no celular.
++- Fora do escopo desta tarefa, mas notado: havia alterações não commitadas de outras
++  tarefas/arquivos no repositório antes de eu começar (`docs/superpowers/plans/....md`
++  modificado, e vários arquivos em `.superpowers/sdd/.../` de T1–T6 — briefs, reports,
++  `progress.md`, `plan-path`, diffs de review — ainda não commitados). Não toquei neles;
++  meu commit inclui só os arquivos de T7 (código + este relatório).
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+index 1c89e57..73ac226 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+@@ -1,41 +1,48 @@
+ package io.github.pagmovel.iptvplayer.ui
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.setValue
+ import androidx.work.WorkManager
+ import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoTela
++import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoViewModel
+ import io.github.pagmovel.iptvplayer.ui.contas.ContasTela
+ import io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel
+ import io.github.pagmovel.iptvplayer.ui.resumo.ResumoTela
+ import io.github.pagmovel.iptvplayer.ui.resumo.ResumoViewModel
+ 
+ /**
+- * Navegação manual entre as duas telas do app (Contas e Resumo) — sem
+- * `androidx.navigation:navigation-compose`, que o catálogo nem declara: o app só tem duas
+- * telas e uma troca simples de estado resolve, sem precisar de rotas/back stack de uma
+- * biblioteca de navegação (ver YAGNI do brief T11).
++ * Navegação manual entre as telas do app (Resumo, Contas e Ao vivo) — sem
++ * `androidx.navigation:navigation-compose`, que o catálogo nem declara: uma troca simples de
++ * estado resolve, sem precisar de rotas/back stack de uma biblioteca de navegação (ver YAGNI
++ * do brief T11).
+  */
+-private enum class Tela { RESUMO, CONTAS }
++private enum class Tela { RESUMO, CONTAS, AO_VIVO }
+ 
+ @Composable
+ fun Navegacao(app: AppIptv) {
+     var tela by remember { mutableStateOf(Tela.RESUMO) }
+     // Distingue "sem conta, forçar o cadastro" (brief T11: abre direto o formulário) de
+     // "usuário escolheu gerenciar contas" (não abre o formulário sozinho).
+     var forcarFormulario by remember { mutableStateOf(false) }
+     val workManager = remember { WorkManager.getInstance(app) }
+     when (tela) {
+         Tela.RESUMO -> ResumoTela(
+             viewModel = remember { ResumoViewModel(app.banco, app.contasRepositorio, workManager) },
+             onPrecisaDeConta = { forcarFormulario = true; tela = Tela.CONTAS },
+             onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
++            onAssistirAoVivo = { tela = Tela.AO_VIVO },
+         )
+         Tela.CONTAS -> ContasTela(
+             viewModel = remember { ContasViewModel(app.contasRepositorio) },
+             onVoltar = { tela = Tela.RESUMO },
+             abrirFormularioInicialmente = forcarFormulario,
+         )
++        Tela.AO_VIVO -> AoVivoTela(
++            viewModel = remember { AoVivoViewModel(app) },
++            onVoltar = { tela = Tela.RESUMO },
++        )
+     }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+new file mode 100644
+index 0000000..a3e82c9
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+@@ -0,0 +1,114 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.Button
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Tab
++import androidx.compose.material3.TabRow
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalLifecycleOwner
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.viewinterop.AndroidView
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.LifecycleEventObserver
++import androidx.media3.ui.PlayerView
++import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
++
++private enum class AbaAoVivo { CANAIS, PROGRAMACAO }
++
++/**
++ * Tela de TV ao vivo (brief T7, design Sec. "TV ao vivo"): player em cima, abas Canais/
++ * Programacao embaixo. A aba Programacao (T8) ainda nao existe -- fica com um placeholder.
++ *
++ * Global Constraint (segundo plano): o video para em ON_STOP e reabre do zero em ON_START --
++ * e transmissao ao vivo, nao ha posicao pra retomar. ON_DISPOSE libera o ExoPlayer de
++ * verdade, pra nao vazar ao sair da tela.
++ */
++@Composable
++fun AoVivoTela(viewModel: AoVivoViewModel, onVoltar: () -> Unit) {
++    var carregando by remember { mutableStateOf(true) }
++    var aba by remember { mutableStateOf(AbaAoVivo.CANAIS) }
++
++    LaunchedEffect(viewModel) {
++        viewModel.carregar()
++        carregando = false
++    }
++
++    val lifecycleOwner = LocalLifecycleOwner.current
++    DisposableEffect(lifecycleOwner, viewModel) {
++        val observer = LifecycleEventObserver { _, evento ->
++            when (evento) {
++                Lifecycle.Event.ON_STOP -> viewModel.pausar()
++                Lifecycle.Event.ON_START -> viewModel.retomar()
++                else -> Unit
++            }
++        }
++        lifecycleOwner.lifecycle.addObserver(observer)
++        onDispose {
++            lifecycleOwner.lifecycle.removeObserver(observer)
++            viewModel.liberar()
++        }
++    }
++
++    if (carregando) {
++        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
++        return
++    }
++
++    Column(Modifier.fillMaxSize()) {
++        TextButton(onClick = onVoltar) { Text("Voltar") }
++
++        Box(Modifier.fillMaxWidth().height(220.dp)) {
++            AndroidView(
++                factory = { context -> PlayerView(context).apply { player = viewModel.exoPlayer } },
++                modifier = Modifier.fillMaxSize(),
++            )
++
++            // Global Constraint: so mostra erro (e o botao manual) quando a qualidade mais
++            // baixa tambem falhou -- nunca tenta de novo sozinho sem esse toque.
++            if (viewModel.eventoAtual == EventoCascata.FalhaTerminal) {
++                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++                        Text(
++                            "Nao foi possivel tocar o canal, nem na qualidade mais baixa.",
++                            color = MaterialTheme.colorScheme.onError,
++                        )
++                        Button(onClick = { viewModel.tentarNovamente() }) { Text("Tentar de novo") }
++                    }
++                }
++            }
++        }
++
++        TabRow(selectedTabIndex = aba.ordinal) {
++            Tab(selected = aba == AbaAoVivo.CANAIS, onClick = { aba = AbaAoVivo.CANAIS }, text = { Text("Canais") })
++            Tab(
++                selected = aba == AbaAoVivo.PROGRAMACAO,
++                onClick = { aba = AbaAoVivo.PROGRAMACAO },
++                text = { Text("Programacao") },
++            )
++        }
++
++        Box(Modifier.weight(1f).fillMaxWidth()) {
++            when (aba) {
++                AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
++                AbaAoVivo.PROGRAMACAO -> Text("Programacao chega na T8.", Modifier.padding(16.dp))
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+new file mode 100644
+index 0000000..82d3093
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+@@ -0,0 +1,172 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.media3.exoplayer.ExoPlayer
++import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.aovivo.CascataQualidade
++import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
++import io.github.pagmovel.iptvplayer.aovivo.PlayerAoVivo
++import io.github.pagmovel.iptvplayer.aovivo.agruparPorQualidade
++import io.github.pagmovel.iptvplayer.dados.CanalFavorito
++import io.github.pagmovel.iptvplayer.dados.Categoria
++import io.github.pagmovel.iptvplayer.dados.Programa
++import io.github.pagmovel.iptvplayer.dados.TipoConteudo
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.launch
++
++/** Programas de ate 24h atras ate agora -- janela ampla o suficiente pra conter o que esta
++ * no ar, sem depender de um horario fixo de inicio de dia. */
++private const val JANELA_PROGRAMACAO_MS = 24 * 60 * 60 * 1000L
++
++/** Entre os programas retornados por [CatalogoDao.programacao], o que esta no ar agora --
++ * comeca antes (ou agora) e ainda nao terminou. */
++fun programaNoInstante(programas: List<Programa>, agora: Long): Programa? =
++    programas.lastOrNull { it.inicio <= agora && it.fim > agora }
++
++/** Filtro aplicado a lista de canais agrupados: por categoria (null = Todos) e/ou so favoritos. */
++fun filtrarCanais(
++    canais: List<CanalAgrupado>,
++    favoritos: List<CanalFavorito>,
++    categoriaId: Long?,
++    somenteFavoritos: Boolean,
++): List<CanalAgrupado> {
++    val chavesFavoritas = favoritos.map { it.nomeBase to it.categoriaId }.toSet()
++    return canais.filter { canal ->
++        (categoriaId == null || canal.categoriaId == categoriaId) &&
++            (!somenteFavoritos || (canal.nomeBase to canal.categoriaId) in chavesFavoritas)
++    }
++}
++
++/**
++ * Estado e acoes da tela de TV ao vivo -- mesma observacao de
++ * [io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel] sobre nao ser um
++ * `androidx.lifecycle.ViewModel`.
++ *
++ * [carregar] resolve a conta ativa e monta o [PlayerAoVivo] -- so precisa ser chamado uma vez
++ * (a conta ativa nao muda durante a sessao da tela); so depois dele os `Flow`s de categorias/
++ * favoritos/canais ficam disponiveis (ver [AoVivoTela]).
++ */
++class AoVivoViewModel(private val app: AppIptv) {
++    private val banco get() = app.banco
++
++    private var contaId: Long = 0L
++    private lateinit var playerAoVivo: PlayerAoVivo
++
++    private val filtroCategoria = MutableStateFlow<Long?>(null)
++    private val filtroSomenteFavoritos = MutableStateFlow(false)
++
++    // Mesmo dispatcher do escopo interno de PlayerAoVivo (Dispatchers.Main.immediate): a
++    // inscricao em cascata.eventos precisa estar ativa ANTES de selecionarCanal chamar
++    // playerAoVivo.abrir(), que chama cascata.iniciar() -- eventos e um SharedFlow sem
++    // replay, perderia o primeiro Tocando senao (mesmo achado real documentado em
++    // PlayerAoVivo.kt).
++    private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++    private var cascataAtual: CascataQualidade? = null
++    private var canalAtual: CanalAgrupado? = null
++    private var jobEventos: Job? = null
++
++    var eventoAtual by mutableStateOf<EventoCascata?>(null)
++        private set
++
++    val exoPlayer: ExoPlayer get() = playerAoVivo.exoPlayer
++
++    lateinit var categorias: Flow<List<Categoria>>
++        private set
++    lateinit var favoritos: Flow<List<CanalFavorito>>
++        private set
++    lateinit var canaisFiltrados: Flow<List<CanalAgrupado>>
++        private set
++
++    suspend fun carregar() {
++        val conta = requireNotNull(banco.contaDao().ativa()) { "sem conta ativa" }
++        contaId = conta.id
++        val cred = app.contasRepositorio.credenciais(conta)
++        val api = app.criarApi(cred)
++        playerAoVivo = PlayerAoVivo(app) { streamId -> api.urlAoVivo(streamId) }
++
++        categorias = banco.catalogoDao().categorias(contaId, TipoConteudo.AO_VIVO)
++        favoritos = banco.catalogoDao().favoritos(contaId)
++        val canaisAgrupados = banco.catalogoDao().canais(contaId).map { agruparPorQualidade(it) }
++        canaisFiltrados = combine(
++            canaisAgrupados,
++            favoritos,
++            filtroCategoria,
++            filtroSomenteFavoritos,
++        ) { canais, favs, categoriaId, somenteFav -> filtrarCanais(canais, favs, categoriaId, somenteFav) }
++    }
++
++    /** Programa no ar agora no canal, ou null se nao tem EPG ou a janela nao tem nada no ar. */
++    suspend fun programaAtual(canal: CanalAgrupado): Programa? {
++        val epgId = canal.epgId ?: return null
++        val agora = System.currentTimeMillis()
++        val programas = banco.catalogoDao().programacao(contaId, epgId, agora - JANELA_PROGRAMACAO_MS, agora + 1)
++        return programaNoInstante(programas, agora)
++    }
++
++    fun filtrarPorCategoria(categoriaId: Long?) {
++        filtroCategoria.value = categoriaId
++    }
++
++    fun filtrarFavoritos(somente: Boolean) {
++        filtroSomenteFavoritos.value = somente
++    }
++
++    suspend fun favoritar(canal: CanalAgrupado) {
++        banco.catalogoDao().favoritar(
++            CanalFavorito(contaId, canal.nomeBase, canal.categoriaId, System.currentTimeMillis()),
++        )
++    }
++
++    suspend fun desfavoritar(canal: CanalAgrupado) {
++        banco.catalogoDao().desfavoritar(contaId, canal.nomeBase, canal.categoriaId)
++    }
++
++    /** Cria uma cascata nova pro canal e abre no player, cancelando a cascata anterior.
++     * Le [ConfiguracoesRepositorio.tempoBufferMs] a cada chamada -- uma troca feita em
++     * Configuracoes so vale a partir do proximo canal aberto. */
++    fun selecionarCanal(canal: CanalAgrupado) {
++        if (!::playerAoVivo.isInitialized) return
++        jobEventos?.cancel()
++        canalAtual = canal
++        eventoAtual = null
++
++        val cascata = CascataQualidade(canal, app.configuracoes.tempoBufferMs(), escopo)
++        cascataAtual = cascata
++        jobEventos = escopo.launch {
++            cascata.eventos.collect { evento -> eventoAtual = evento }
++        }
++        playerAoVivo.abrir(canal, cascata)
++    }
++
++    fun tentarNovamente() {
++        cascataAtual?.tentarNovamente()
++    }
++
++    /** ON_STOP (Global Constraint): pausa sem liberar o player. */
++    fun pausar() {
++        if (::playerAoVivo.isInitialized) playerAoVivo.exoPlayer.pause()
++    }
++
++    /** ON_START: reabre o canal atual do zero -- e transmissao ao vivo, nao ha posicao pra retomar. */
++    fun retomar() {
++        canalAtual?.let { selecionarCanal(it) }
++    }
++
++    /** ON_DISPOSE: libera o ExoPlayer de verdade e cancela a coleta de eventos da tela. */
++    fun liberar() {
++        jobEventos?.cancel()
++        if (::playerAoVivo.isInitialized) playerAoVivo.liberar()
++        escopo.cancel()
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt
+new file mode 100644
+index 0000000..6e647b7
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt
+@@ -0,0 +1,152 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.produceState
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.dados.Programa
++import kotlinx.coroutines.launch
++
++/**
++ * Aba "Canais" da tela de TV ao vivo (brief T7, design Sec. "TV ao vivo"): chips de categoria
++ * (Todos / Favoritos / categorias reais, selecao unica) e a lista de canais agrupados por
++ * qualidade -- cada linha com estrela de favorito e o programa que esta no ar agora (ou
++ * "Sem programacao").
++ */
++@Composable
++fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> Unit) {
++    val categorias by viewModel.categorias.collectAsState(initial = emptyList())
++    val favoritos by viewModel.favoritos.collectAsState(initial = emptyList())
++    val canais by viewModel.canaisFiltrados.collectAsState(initial = emptyList())
++    val chavesFavoritas = remember(favoritos) { favoritos.map { it.nomeBase to it.categoriaId }.toSet() }
++    val escopo = rememberCoroutineScope()
++
++    var categoriaSelecionada by remember { mutableStateOf<Long?>(null) }
++    var somenteFavoritos by remember { mutableStateOf(false) }
++
++    Column(Modifier.fillMaxSize()) {
++        LazyRow(
++            Modifier.fillMaxWidth().padding(8.dp),
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            item {
++                FilterChip(
++                    selected = categoriaSelecionada == null && !somenteFavoritos,
++                    onClick = {
++                        categoriaSelecionada = null
++                        somenteFavoritos = false
++                        viewModel.filtrarPorCategoria(null)
++                        viewModel.filtrarFavoritos(false)
++                    },
++                    label = { Text("Todos") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = somenteFavoritos,
++                    onClick = {
++                        categoriaSelecionada = null
++                        somenteFavoritos = true
++                        viewModel.filtrarPorCategoria(null)
++                        viewModel.filtrarFavoritos(true)
++                    },
++                    label = { Text("Favoritos") },
++                )
++            }
++            items(categorias, key = { it.categoriaId }) { categoria ->
++                FilterChip(
++                    selected = !somenteFavoritos && categoriaSelecionada == categoria.categoriaId,
++                    onClick = {
++                        categoriaSelecionada = categoria.categoriaId
++                        somenteFavoritos = false
++                        viewModel.filtrarPorCategoria(categoria.categoriaId)
++                        viewModel.filtrarFavoritos(false)
++                    },
++                    label = { Text(categoria.nome) },
++                )
++            }
++        }
++
++        if (canais.isEmpty()) {
++            Text("Nenhum canal nesse filtro.", Modifier.padding(16.dp))
++        }
++
++        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
++            items(canais, key = { it.nomeBase + "|" + it.categoriaId }) { canal ->
++                val favorito = (canal.nomeBase to canal.categoriaId) in chavesFavoritas
++                LinhaCanal(
++                    canal = canal,
++                    favorito = favorito,
++                    carregarPrograma = { viewModel.programaAtual(canal) },
++                    onClick = { onSelecionarCanal(canal) },
++                    onAlternarFavorito = {
++                        escopo.launch {
++                            if (favorito) viewModel.desfavoritar(canal) else viewModel.favoritar(canal)
++                        }
++                    },
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun LinhaCanal(
++    canal: CanalAgrupado,
++    favorito: Boolean,
++    carregarPrograma: suspend () -> Programa?,
++    onClick: () -> Unit,
++    onAlternarFavorito: () -> Unit,
++) {
++    val programa by produceState<Programa?>(initialValue = null, canal) { value = carregarPrograma() }
++
++    ListItem(
++        headlineContent = { Text(canal.nomeBase) },
++        supportingContent = { Text(programa?.titulo ?: "Sem programacao") },
++        leadingContent = { IconeOuNome(canal.nomeBase) },
++        trailingContent = {
++            TextButton(onClick = onAlternarFavorito) { Text(if (favorito) "★" else "☆") }
++        },
++        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
++    )
++}
++
++/**
++ * ponytail: sem lib de imagem (Coil/Glide) no projeto ainda -- mostra sempre o nome sobre
++ * fundo neutro, mesma regra do design Sec. 4 pra item sem capa. Trocar por um
++ * AsyncImage(canal.icone) quando uma lib de imagem entrar no projeto (T7 nao precisou).
++ */
++@Composable
++private fun IconeOuNome(nome: String) {
++    Box(
++        Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceVariant),
++        contentAlignment = Alignment.Center,
++    ) {
++        Text(nome.take(2).uppercase(), style = MaterialTheme.typography.labelSmall)
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+index b64947a..256d5bf 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+@@ -26,21 +26,26 @@ import io.github.pagmovel.iptvplayer.dados.Conta
+ import io.github.pagmovel.iptvplayer.dados.Contagem
+ import java.text.SimpleDateFormat
+ import java.util.Date
+ import java.util.Locale
+ 
+ /**
+  * Tela de resumo (brief T11) — tela inicial provisória, que o Plano 3 troca pela vitrine.
+  * Sem conta ativa, [onPrecisaDeConta] leva direto para o formulário de cadastro.
+  */
+ @Composable
+-fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGerenciarContas: () -> Unit) {
++fun ResumoTela(
++    viewModel: ResumoViewModel,
++    onPrecisaDeConta: () -> Unit,
++    onGerenciarContas: () -> Unit,
++    onAssistirAoVivo: () -> Unit,
++) {
+     var conta by remember { mutableStateOf<Conta?>(null) }
+     var contagem by remember { mutableStateOf(Contagem(0, 0, 0, 0)) }
+     var carregando by remember { mutableStateOf(true) }
+ 
+     LaunchedEffect(Unit) {
+         val ativa = viewModel.contaAtiva()
+         if (ativa == null) {
+             onPrecisaDeConta()
+             return@LaunchedEffect
+         }
+@@ -75,20 +80,21 @@ fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGeren
+         Text("Séries: ${contagem.series}")
+         Text("Programas: ${contagem.programas}")
+         Spacer(Modifier.height(16.dp))
+         EstadoCarga(info)
+         Spacer(Modifier.height(8.dp))
+         Text("Última carga: " + formatarData(contaAtual.ultimaCargaEm))
+         Spacer(Modifier.height(16.dp))
+         Button(onClick = { viewModel.atualizarAgora(contaAtual.id) }) { Text("Atualizar agora") }
+         Spacer(Modifier.height(8.dp))
+         TextButton(onClick = onGerenciarContas) { Text("Gerenciar contas") }
++        TextButton(onClick = onAssistirAoVivo) { Text("Assistir ao vivo") }
+     }
+ }
+ 
+ @Composable
+ private fun EstadoCarga(info: WorkInfo?) {
+     val texto = when (info?.state) {
+         WorkInfo.State.RUNNING -> "Atualizando: " + nomeEtapa(info.progress.getString("etapa"))
+         WorkInfo.State.ENQUEUED -> "Aguardando conexão com a internet."
+         WorkInfo.State.FAILED -> info.outputData.getString("mensagem") ?: "Falha ao atualizar."
+         else -> null
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+new file mode 100644
+index 0000000..d53d0f6
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+@@ -0,0 +1,78 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.aovivo.Qualidade
++import io.github.pagmovel.iptvplayer.aovivo.VarianteQualidade
++import io.github.pagmovel.iptvplayer.dados.CanalFavorito
++import io.github.pagmovel.iptvplayer.dados.Programa
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++/** So a logica propria da T7 (filtro de canais e escolha do programa no ar) -- o resto de
++ * [AoVivoViewModel] so repassa chamadas pra DAO/repositorios/cascata/player, ja cobertos
++ * pelos testes deles (T1/T2/T3/T5/T6). */
++class AoVivoViewModelTest {
++
++    private fun canal(nomeBase: String, categoriaId: Long) = CanalAgrupado(
++        nomeBase = nomeBase,
++        categoriaId = categoriaId,
++        icone = null,
++        epgId = null,
++        numero = null,
++        variantes = listOf(VarianteQualidade(Qualidade.SD, 1L)),
++    )
++
++    @Test
++    fun `sem filtro nenhum devolve todos os canais`() {
++        val canais = listOf(canal("A", 1), canal("B", 2))
++        val resultado = filtrarCanais(canais, favoritos = emptyList(), categoriaId = null, somenteFavoritos = false)
++        assertEquals(2, resultado.size)
++    }
++
++    @Test
++    fun `filtro por categoria so devolve canais daquela categoria`() {
++        val canais = listOf(canal("A", 1), canal("B", 2))
++        val resultado = filtrarCanais(canais, favoritos = emptyList(), categoriaId = 2L, somenteFavoritos = false)
++        assertEquals(listOf("B"), resultado.map { it.nomeBase })
++    }
++
++    @Test
++    fun `filtro so favoritos usa nomeBase mais categoriaId como chave`() {
++        val canais = listOf(canal("A", 1), canal("B", 1))
++        val favoritos = listOf(CanalFavorito(contaId = 1, nomeBase = "A", categoriaId = 1, criadoEm = 0))
++        val resultado = filtrarCanais(canais, favoritos, categoriaId = null, somenteFavoritos = true)
++        assertEquals(listOf("A"), resultado.map { it.nomeBase })
++    }
++
++    @Test
++    fun `categoria e favoritos combinam com AND`() {
++        val canais = listOf(canal("A", 1), canal("A", 2))
++        val favoritos = listOf(CanalFavorito(contaId = 1, nomeBase = "A", categoriaId = 1, criadoEm = 0))
++        // Favorito e da categoria 1; filtrar por categoria 2 nao deve trazer nada mesmo com somenteFavoritos=false
++        val resultado = filtrarCanais(canais, favoritos, categoriaId = 2L, somenteFavoritos = true)
++        assertEquals(emptyList<String>(), resultado.map { it.nomeBase })
++    }
++
++    private fun programa(inicio: Long, fim: Long) =
++        Programa(contaId = 1, epgId = "epg1", inicio = inicio, fim = fim, titulo = "t-$inicio", descricao = null)
++
++    @Test
++    fun `programaNoInstante acha o programa cujo fim ainda nao passou`() {
++        val programas = listOf(programa(0, 100), programa(100, 200), programa(200, 300))
++        val resultado = programaNoInstante(programas, agora = 150)
++        assertEquals("t-100", resultado?.titulo)
++    }
++
++    @Test
++    fun `programaNoInstante devolve null quando o ultimo programa da janela ja terminou`() {
++        val programas = listOf(programa(0, 100), programa(100, 200))
++        val resultado = programaNoInstante(programas, agora = 250)
++        assertNull(resultado)
++    }
++
++    @Test
++    fun `programaNoInstante devolve null para lista vazia`() {
++        assertNull(programaNoInstante(emptyList(), agora = 150))
++    }
++}

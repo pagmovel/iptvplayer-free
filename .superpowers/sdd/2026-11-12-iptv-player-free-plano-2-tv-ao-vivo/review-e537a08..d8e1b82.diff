@@ -1,0 +1,1001 @@
+# Review package: e537a0838e450a5da79ad82a822f95f5c58991cb..HEAD
+
+## Commits
+d8e1b82 feat: tabela de favoritos (migracao Room 1 -> 2)
+
+## Files changed
+ .../task-2-report.md                               | 146 +++++++
+ app/build.gradle.kts                               |  12 +
+ .../2.json                                         | 463 +++++++++++++++++++++
+ .../java/io/github/pagmovel/iptvplayer/AppIptv.kt  |   4 +-
+ .../github/pagmovel/iptvplayer/dados/BancoApp.kt   |  29 +-
+ .../pagmovel/iptvplayer/dados/CatalogoDao.kt       |  10 +
+ .../github/pagmovel/iptvplayer/dados/Entidades.kt  |  13 +
+ .../pagmovel/iptvplayer/dados/CatalogoDaoTest.kt   |  11 +
+ .../pagmovel/iptvplayer/dados/MigracaoBancoTest.kt |  99 +++++
+ 9 files changed, 782 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md
+new file mode 100644
+index 0000000..5d5cd08
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md
+@@ -0,0 +1,146 @@
++# T2: Favoritos — migração do Room + DAO — relatório
++
++## O que foi implementado
++
++- **`CanalFavorito`** (`app/src/main/java/.../dados/Entidades.kt`): nova `@Entity` com chave
++  composta `["contaId", "nomeBase", "categoriaId"]`, `categoriaId: Long` (nunca `Long?`,
++  conforme o brief — quem chama normaliza via `chaveCategoria`, de T1).
++- **`CatalogoDao`** (`.../dados/CatalogoDao.kt`): `favoritar` (`@Insert(REPLACE)` — favoritar de
++  novo o mesmo canal só atualiza `criadoEm`, não lança `SQLiteConstraintException`),
++  `desfavoritar` (`DELETE` pela chave composta) e `favoritos(contaId): Flow<List<CanalFavorito>>`
++  (mesmo padrão de `ContaDao.listar()`).
++- **`BancoApp`** (`.../dados/BancoApp.kt`): `CanalFavorito::class` adicionada a `entities`,
++  `version = 2`, e `companion object { val MIGRACAO_1_2 = object : Migration(1, 2) { ... } }`
++  com SQL explícito (`CREATE TABLE IF NOT EXISTS CanalFavorito (...)`, idêntico byte a byte ao
++  que o Room gerou em `2.json` — conferido manualmente) — migração real, nunca
++  `fallbackToDestructiveMigration`.
++- **`AppIptv.kt`**: `Room.databaseBuilder(...).addMigrations(BancoApp.MIGRACAO_1_2).build()` —
++  sem isso a `Migration` existiria no código mas nunca seria usada pelo app real (o builder de
++  produção é o único lugar que importa para "não apagar o banco do dono").
++- **`app/schemas/.../2.json`**: gerado automaticamente pelo KSP/Room no build (não escrito à
++  mão, confirmado após o build: `CREATE TABLE` da entidade bate exatamente com o SQL que escrevi
++  na `Migration`).
++
++## Desvio do brief: `MigrationTestHelper` não foi usado — achado real
++
++O brief sugeria `androidx.room.testing.MigrationTestHelper` lendo o schema de
++`app/schemas/`. Tentei essa rota (passos abaixo) e ela não funciona neste projeto
++(unit test Robolectric, sem `androidTest`/emulador), por uma limitação real do AGP 9.5.1:
++
++1. **Tentativa 1** (`room-testing` + `MigrationTestHelper` padrão): `FileNotFoundException:
++   Cannot find the schema file in the assets folder`. `MigrationTestHelper` lê o schema via
++   `AssetManager`/`InstrumentationRegistry`, e por padrão o Robolectric só expõe os assets do
++   variant de produção (`android_merged_assets` → `mergeDebugAssets`), nunca o sourceSet `test`.
++2. **Tentativa 2** (`testOptions.unitTests.isIncludeAndroidResources = true` +
++   `sourceSets.test.assets.srcDirs("$projectDir/schemas")`): introduziu uma segunda falha —
++   `IllegalAccessException: ... module java.base does not export jdk.internal.access` (o
++   Robolectric passa a chamar `ApplicationSharedMemory.create()` ao montar a `Application` de
++   teste, que precisa de um `--add-opens` do JDK 17) — corrigi com
++   `it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")`, mas **a
++   `FileNotFoundException` continuou**: verifiquei manualmente a pasta
++   `app/build/intermediates/assets/debug/mergeDebugAssets` depois do build e ela não contém o
++   schema — confirma que `sourceSets.test.assets` não é mesclado nos assets que o Robolectric
++   enxerga nesta configuração (não existe task `mergeDebugUnitTestAssets` nem equivalente; só
++   roda `mergeDebugAssets`, do variant de produção).
++
++Decidi **não insistir** numa configuração de AGP específica de versão e sem documentação
++confiável disponível (sem acesso à internet para confirmar a API exata da variant API para
++isso), e usei uma abordagem mais robusta e sem essa dependência de infraestrutura:
++
++- O teste (`MigracaoBancoTest.kt`) lê o `1.json` como **resource de teste comum**
++  (`sourceSets.test.resources.srcDirs("$projectDir/schemas")` — classpath puro da JVM, sem
++  `AssetManager`/Android nenhum) e recria o schema v1 com o **SQL exato** que está no JSON
++  (`createSql` de cada entidade + `contentSyncTriggers` dos FTS + `setupQueries` do
++  `room_master_table`, incluindo o `identityHash` da v1) — ou seja, o mesmo schema que o Room
++  realmente gerou naquela versão, só que replay por SQL puro em vez de via `AssetManager`.
++- Depois abre com o **`Room.databaseBuilder` real** (`Room.databaseBuilder(context,
++  BancoApp::class.java, arquivo.absolutePath).addMigrations(BancoApp.MIGRACAO_1_2).build()`) —
++  o mesmo builder de produção, com a mesma `Migration` registrada em `AppIptv.kt`. Isso na
++  prática testa exatamente o cenário real: um banco de verdade na versão 1 sendo aberto por um
++  `BancoApp` compilado na versão 2, passando pelo `onUpgrade`/`onValidateSchema` reais do Room
++  (não um mock, não um atalho).
++
++**Consequência:** removi a dependência `room-testing` que tinha adicionado (ponytail: código/dep
++não usada não fica) — ela não é necessária para a abordagem final. Reverti também
++`testOptions.unitTests.isIncludeAndroidResources` e o `add-opens`, que só existiam por causa da
++tentativa com `MigrationTestHelper`. O `app/build.gradle.kts` ficou só com uma linha nova:
++`sourceSets { getByName("test") { resources.srcDirs("$projectDir/schemas") } }`.
++
++**Isto é uma preocupação a levantar para o controlador:** o brief pediu `MigrationTestHelper`
++explicitamente como parte da interface "Produz". Se o controlador preferir investigar mais a
++configuração do AGP 9.5.1 para fazer `MigrationTestHelper` funcionar de verdade (ex.: via
++`androidTest` real num emulador, ou alguma API de variant ainda não tentada), é um esforço
++adicional e separado — não bloqueante, porque o teste atual cobre o mesmo comportamento real
++(dado sobrevive, tabela nova existe, SQL idêntico ao gerado pelo Room) usando o próprio
++`Room.databaseBuilder` de produção.
++
++## Evidência RED → GREEN
++
++**RED** (implementação de produção guardada em `git stash`, só os testes novos presentes):
++```
++git stash push -m "RED temporario T2" -- app/src/main/java/.../AppIptv.kt \
++    app/src/main/java/.../dados/BancoApp.kt app/src/main/java/.../dados/CatalogoDao.kt \
++    app/src/main/java/.../dados/Entidades.kt
++
++./scripts/gradle.ps1 :app:testDebugUnitTest --tests ...CatalogoDaoTest --tests ...MigracaoBancoTest
++```
++Saída: `compileDebugUnitTestKotlin FAILED`, com `Unresolved reference` em `CanalFavorito`,
++`favoritar`, `favoritos` (`CatalogoDaoTest.kt:102,103,105,106`) e `BancoApp.MIGRACAO_1_2`
++(`MigracaoBancoTest.kt:34`) — RED genuíno (não compila sem a implementação).
++
++Em seguida `git stash pop` restaurou a implementação.
++
++**GREEN** (depois de implementar + corrigir o `app/build.gradle.kts` — ver seção do desvio):
++```
++./scripts/gradle.ps1 :app:testDebugUnitTest --tests ...CatalogoDaoTest --tests ...MigracaoBancoTest
++```
++Saída: `BUILD SUCCESSFUL in 2m 58s`. Confirmado via XML de resultado:
++- `MigracaoBancoTest`: `tests="1" failures="0" errors="0"`.
++- `CatalogoDaoTest`: `tests="7" failures="0" errors="0"` (as 6 já existentes + a nova
++  `favoritar e desfavoritar um canal agrupado`).
++
++**Suíte completa** antes do commit:
++```
++./scripts/gradle.ps1 :app:testDebugUnitTest
++```
++Saída: `BUILD SUCCESSFUL in 1m 3s`. Soma de todos os `TEST-*.xml`: **53 testes, 0 falhas**.
++
++## Arquivos alterados
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt` — entidade `CanalFavorito`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt` — `favoritar`/`desfavoritar`/`favoritos`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt` — versão 2 + `MIGRACAO_1_2`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt` — `.addMigrations(BancoApp.MIGRACAO_1_2)`.
++- `app/build.gradle.kts` — `sourceSets.test.resources.srcDirs("$projectDir/schemas")` (ver desvio acima).
++- `app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt` (novo).
++- `app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt` — novo teste de favoritar/desfavoritar.
++- `app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json` (gerado pelo build, não escrito à mão).
++- `gradle/libs.versions.toml` — sem diff líquido (adicionei e depois removi `androidx-room-testing`).
++
++## Achados da autorrevisão
++
++- Migração é real: `Migration(1, 2)` com SQL explícito, registrada em `AppIptv.kt` (sem isso o
++  app real nunca usaria a migração, só o código morto existiria).
++- `categoriaId` em `CanalFavorito` é `Long`, nunca `Long?` — confirmado na entidade e em todo
++  uso no DAO/teste.
++- Teste de migração usa dados reais (SQL de verdade replayado do schema exportado, builder de
++  produção real) — não é mock.
++- `favoritar` usa `OnConflictStrategy.REPLACE` — decisão minha, não estava explícita no brief;
++  justificativa: favoritar de novo o mesmo canal não deveria lançar excessão (mesmo padrão já
++  usado em `inserirCanais`/`inserirFilmes`/`inserirSeries` deste DAO, inclusive com comentário
++  documentando um achado real parecido).
++- Removi a dependência `room-testing` que não ficou em uso, e as configurações de
++  `testOptions`/`add-opens` que só existiam por causa da tentativa com `MigrationTestHelper` —
++  não deixei configuração morta no `build.gradle.kts`.
++
++## Dúvidas / preocupações para o controlador
++
++1. O desvio do `MigrationTestHelper` (ver seção acima) é a principal pendência de decisão: a
++   cobertura real está lá (schema recriado fielmente + builder de produção + `Migration` real),
++   mas não é literalmente a ferramenta que o brief nomeou. Se isso for um problema, preciso de
++   orientação sobre se vale investir em investigar a configuração de assets do AGP 9.5.1 mais a
++   fundo (sem conexão à internet nesta sessão para confirmar a API certa) ou se a abordagem
++   atual é aceitável.
++2. Não toquei em `docs/superpowers/plans/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md`
++   (já aparecia modificado no `git status` antes de eu começar) nem no `.superpowers/sdd/.../`
++   nem no `fwcd.kotlin-0.2.36.vsix` — não são meus, deixei de fora do commit.
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index eb09a88..8155a30 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -71,20 +71,32 @@ android {
+     // esse host também devolve HTTP 429 (achado real: T10 travou nisso mesmo depois do fix da
+     // T9). Robolectric suporta oficialmente redirecionar esse fetcher para outro repositório
+     // via system property (robolectric.org/blog/2023/11/11/improving-android-all-downloading),
+     // sem precisar de usuário/senha para um espelho público.
+     testOptions {
+         unitTests.all {
+             it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
+             it.systemProperty("robolectric.dependency.repo.id", "google-mirror")
+         }
+     }
++
++    // T2 (MigracaoBancoTest): schema exportado (app/schemas/) disponível no classpath do
++    // teste JVM, como resource comum (não asset Android — MigrationTestHelper dependeria de
++    // InstrumentationRegistry via AssetManager, que neste setup de unit test/Robolectric não
++    // tem o sourceSet de teste mesclado; achado real desta tarefa). O teste lê o 1.json direto
++    // e recria o schema v1 com SQL puro, depois sobe o BancoApp real (com a Migration(1, 2)
++    // registrada em AppIptv.kt) para migrar.
++    sourceSets {
++        getByName("test") {
++            resources.srcDirs("$projectDir/schemas")
++        }
++    }
+ }
+ 
+ // Esquema do Room versionado no repositório, para dar suporte a migrações nas próximas
+ // versões do banco (ver app/src/main/.../dados/BancoApp.kt).
+ ksp {
+     arg("room.schemaLocation", "$projectDir/schemas")
+ }
+ 
+ dependencies {
+     implementation(libs.androidx.core.ktx)
+diff --git a/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json
+new file mode 100644
+index 0000000..302280d
+--- /dev/null
++++ b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json
+@@ -0,0 +1,463 @@
++{
++  "formatVersion": 1,
++  "database": {
++    "version": 2,
++    "identityHash": "e581b3e2e57a9e21b683c9d971cf9fa4",
++    "entities": [
++      {
++        "tableName": "Categoria",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `tipo` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `nome` TEXT NOT NULL, PRIMARY KEY(`contaId`, `tipo`, `categoriaId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "tipo",
++            "columnName": "tipo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "tipo",
++            "categoriaId"
++          ]
++        }
++      },
++      {
++        "tableName": "Canal",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `icone` TEXT, `epgId` TEXT, `numero` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "icone",
++            "columnName": "icone",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "numero",
++            "columnName": "numero",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Filme",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `extensao` TEXT, `ano` INTEGER, `nota` REAL, `adicionadoEm` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "extensao",
++            "columnName": "extensao",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "adicionadoEm",
++            "columnName": "adicionadoEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Serie",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `seriesId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `sinopse` TEXT, `ano` INTEGER, `nota` REAL, `modificadaEm` INTEGER, PRIMARY KEY(`contaId`, `seriesId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "seriesId",
++            "columnName": "seriesId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "sinopse",
++            "columnName": "sinopse",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "modificadaEm",
++            "columnName": "modificadaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "seriesId"
++          ]
++        }
++      },
++      {
++        "tableName": "Programa",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `epgId` TEXT NOT NULL, `inicio` INTEGER NOT NULL, `fim` INTEGER NOT NULL, `titulo` TEXT NOT NULL, `descricao` TEXT, PRIMARY KEY(`contaId`, `epgId`, `inicio`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "inicio",
++            "columnName": "inicio",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "fim",
++            "columnName": "fim",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "titulo",
++            "columnName": "titulo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "descricao",
++            "columnName": "descricao",
++            "affinity": "TEXT"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "epgId",
++            "inicio"
++          ]
++        }
++      },
++      {
++        "tableName": "Conta",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nome` TEXT NOT NULL, `servidor` TEXT NOT NULL, `usuario` TEXT NOT NULL, `senhaCifrada` BLOB NOT NULL, `ativa` INTEGER NOT NULL, `ultimaCargaEm` INTEGER)",
++        "fields": [
++          {
++            "fieldPath": "id",
++            "columnName": "id",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "servidor",
++            "columnName": "servidor",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "usuario",
++            "columnName": "usuario",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "senhaCifrada",
++            "columnName": "senhaCifrada",
++            "affinity": "BLOB",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ativa",
++            "columnName": "ativa",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ultimaCargaEm",
++            "columnName": "ultimaCargaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": true,
++          "columnNames": [
++            "id"
++          ]
++        }
++      },
++      {
++        "tableName": "CanalFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Canal`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Canal",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_UPDATE BEFORE UPDATE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_DELETE BEFORE DELETE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_UPDATE AFTER UPDATE ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_INSERT AFTER INSERT ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "FilmeFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Filme`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Filme",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_UPDATE BEFORE UPDATE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_DELETE BEFORE DELETE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_UPDATE AFTER UPDATE ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_INSERT AFTER INSERT ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "SerieFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Serie`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Serie",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_UPDATE BEFORE UPDATE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_DELETE BEFORE DELETE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_UPDATE AFTER UPDATE ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_INSERT AFTER INSERT ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "CanalFavorito",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `nomeBase` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `criadoEm` INTEGER NOT NULL, PRIMARY KEY(`contaId`, `nomeBase`, `categoriaId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nomeBase",
++            "columnName": "nomeBase",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "criadoEm",
++            "columnName": "criadoEm",
++            "affinity": "INTEGER",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "nomeBase",
++            "categoriaId"
++          ]
++        }
++      }
++    ],
++    "setupQueries": [
++      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
++      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e581b3e2e57a9e21b683c9d971cf9fa4')"
++    ]
++  }
++}
+\ No newline at end of file
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+index c624671..04c4075 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+@@ -11,16 +11,18 @@ import okhttp3.OkHttpClient
+ 
+ /**
+  * Monta à mão as dependências do app — banco, cofre de senhas e repositório de contas — sem
+  * framework de DI (mesma decisão do resto do app). [io.github.pagmovel.iptvplayer.carga.CargaWorker]
+  * lê essas dependências de volta daqui, pelo construtor de 2 parâmetros que o WorkManager usa
+  * por reflexão (ver o construtor secundário dele); não precisa de `Configuration.Provider`
+  * nem de `WorkerFactory` customizada no `Configuration` do app.
+  */
+ class AppIptv : Application() {
+     val banco: BancoApp by lazy {
+-        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db").build()
++        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db")
++            .addMigrations(BancoApp.MIGRACAO_1_2)
++            .build()
+     }
+     val cofre: Cofre by lazy { CofreKeystore() }
+     val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }
+     val contasRepositorio: ContasRepositorio by lazy { ContasRepositorio(banco, cofre, criarApi) }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+index 06561c5..f27d82e 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+@@ -1,33 +1,54 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Database
+ import androidx.room.RoomDatabase
++import androidx.room.migration.Migration
++import androidx.sqlite.db.SupportSQLiteDatabase
+ import io.github.pagmovel.iptvplayer.conta.ContaDao
+ 
+ /**
+- * Banco local do app: catálogo (categorias, canais, filmes, séries, programação) e contas
+- * Xtream. Versão 1, com esquema exportado para `app/schemas/` (ver `room.schemaLocation`
+- * em `app/build.gradle.kts`) para dar suporte a migrações nas próximas versões.
++ * Banco local do app: catálogo (categorias, canais, filmes, séries, programação), contas
++ * Xtream e favoritos. Versão 2, com esquema exportado para `app/schemas/` (ver
++ * `room.schemaLocation` em `app/build.gradle.kts`) para dar suporte a migrações nas próximas
++ * versões.
+  *
+  * Toda troca de catálogo (apagar + reinserir) acontece dentro de `withTransaction { }`,
+  * chamada feita pela T9 — este banco só expõe os DAOs.
+  */
+ @Database(
+     entities = [
+         Categoria::class,
+         Canal::class,
+         Filme::class,
+         Serie::class,
+         Programa::class,
+         Conta::class,
+         CanalFts::class,
+         FilmeFts::class,
+         SerieFts::class,
++        CanalFavorito::class,
+     ],
+-    version = 1,
++    version = 2,
+     exportSchema = true,
+ )
+ abstract class BancoApp : RoomDatabase() {
+     abstract fun catalogoDao(): CatalogoDao
+     abstract fun contaDao(): ContaDao
++
++    companion object {
++        /**
++         * 1 -> 2 (T2): só cria a tabela de favoritos; não mexe nas tabelas existentes. Real
++         * (SQL explícito), nunca `fallbackToDestructiveMigration` — rodar o app uma vez não
++         * apaga o banco do dono. Registrada em `Room.databaseBuilder` (ver `AppIptv.kt`).
++         */
++        val MIGRACAO_1_2 = object : Migration(1, 2) {
++            override fun migrate(db: SupportSQLiteDatabase) {
++                db.execSQL(
++                    "CREATE TABLE IF NOT EXISTS `CanalFavorito` (`contaId` INTEGER NOT NULL, " +
++                        "`nomeBase` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, " +
++                        "`criadoEm` INTEGER NOT NULL, PRIMARY KEY(`contaId`, `nomeBase`, `categoriaId`))",
++                )
++            }
++        }
++    }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+index 1599d71..7dcd63b 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+@@ -1,17 +1,18 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Dao
+ import androidx.room.Insert
+ import androidx.room.OnConflictStrategy
+ import androidx.room.Query
+ import androidx.room.Transaction
++import kotlinx.coroutines.flow.Flow
+ 
+ /** Contagem de itens do catálogo de uma conta, por tipo. */
+ data class Contagem(val canais: Int, val filmes: Int, val series: Int, val programas: Int)
+ 
+ /**
+  * Acesso ao catálogo (categorias, canais, filmes, séries e programação) e à busca textual
+  * por nome. Os índices FTS (ver `Fts.kt`) se mantêm sincronizados sozinhos: o Room gera
+  * triggers de sincronia (`room_fts_content_sync_...`, visíveis em
+  * `app/schemas/.../1.json`) que disparam a cada INSERT/UPDATE/DELETE nas tabelas de
+  * origem — este DAO não reconstrói índice nenhum manualmente.
+@@ -78,20 +79,29 @@ abstract class CatalogoDao {
+             "WHERE Canal.contaId = :contaId AND CanalFts.CanalFts MATCH :termoFts",
+     )
+     protected abstract suspend fun buscarCanaisPorTermoFts(contaId: Long, termoFts: String): List<Canal>
+ 
+     /** Busca por nome, ignorando acento/maiúscula e aceitando prefixo (útil ao digitar). */
+     suspend fun buscarNomesCanais(contaId: Long, termo: String): List<Canal> {
+         val termoFts = termoParaFts(termo)
+         if (termoFts.isEmpty()) return emptyList()
+         return buscarCanaisPorTermoFts(contaId, termoFts)
+     }
++
++    // REPLACE: favoritar de novo o mesmo canal (mesma chave) só atualiza criadoEm, em vez de
++    // lançar SQLiteConstraintException.
++    @Insert(onConflict = OnConflictStrategy.REPLACE)
++    abstract suspend fun favoritar(favorito: CanalFavorito)
++    @Query("DELETE FROM CanalFavorito WHERE contaId = :contaId AND nomeBase = :nomeBase AND categoriaId = :categoriaId")
++    abstract suspend fun desfavoritar(contaId: Long, nomeBase: String, categoriaId: Long)
++    @Query("SELECT * FROM CanalFavorito WHERE contaId = :contaId")
++    abstract fun favoritos(contaId: Long): Flow<List<CanalFavorito>>
+ }
+ 
+ /**
+  * Prepara o termo digitado para o MATCH do FTS4: separa por espaço, escapa aspas e junta
+  * cada palavra como `"palavra*"` — o `*` precisa ficar DENTRO das aspas para valer como
+  * prefixo (https://www.sqlite.org/fts3.html#fts4query, exemplo `"lin* app*"`; `"palavra"*`
+  * com o `*` fora não aplica prefixo — é um erro fácil de cometer e que este comentário
+  * existe para não repetir). O espaço entre os termos é AND implícito no FTS4.
+  */
+ private fun termoParaFts(termo: String): String =
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+index d0d2dcc..7d72599 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+@@ -62,20 +62,33 @@ data class Serie(
+ @Entity(primaryKeys = ["contaId", "epgId", "inicio"])
+ data class Programa(
+     val contaId: Long,
+     val epgId: String,
+     val inicio: Long,
+     val fim: Long,
+     val titulo: String,
+     val descricao: String?,
+ )
+ 
++/**
++ * Canal ao vivo (agrupado por qualidade, ver [io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado])
++ * marcado como favorito por uma conta. `categoriaId` aqui nunca é `Long?`: quem chama já passa
++ * o valor normalizado por [io.github.pagmovel.iptvplayer.aovivo.chaveCategoria].
++ */
++@Entity(primaryKeys = ["contaId", "nomeBase", "categoriaId"])
++data class CanalFavorito(
++    val contaId: Long,
++    val nomeBase: String,
++    val categoriaId: Long,
++    val criadoEm: Long,
++)
++
+ /** Conta Xtream cadastrada no app. `senhaCifrada` nunca guarda texto puro — ver [io.github.pagmovel.iptvplayer.conta.Cofre]. */
+ @Entity
+ data class Conta(
+     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+     val nome: String,
+     val servidor: String,
+     val usuario: String,
+     val senhaCifrada: ByteArray,
+     val ativa: Boolean,
+     val ultimaCargaEm: Long?,
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+index 888d566..9df1ccb 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+@@ -1,13 +1,14 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Room
++import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.test.runTest
+ import org.junit.After
+ import org.junit.Assert.assertEquals
+ import org.junit.Before
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
+ import org.robolectric.RuntimeEnvironment
+ 
+ @RunWith(RobolectricTestRunner::class)
+@@ -87,11 +88,21 @@ class CatalogoDaoTest {
+ 
+     @Test fun `contagem soma cada tipo`() = runTest {
+         dao.inserirCategorias(listOf(Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes")))
+         dao.inserirCanais(listOf(canal(1, "Globo HD"), canal(2, "SporTV HD")))
+         dao.inserirFilmes(listOf(filme(1, "Filme A")))
+         dao.inserirSeries(listOf(serie(1, "Serie A"), serie(2, "Serie B")))
+         dao.inserirProgramas(listOf(Programa(1, "epg1", 1000L, 2000L, "Jornal", null)))
+ 
+         assertEquals(Contagem(canais = 2, filmes = 1, series = 2, programas = 1), dao.contagem(1))
+     }
++
++    @Test fun `favoritar e desfavoritar um canal agrupado`() = runTest {
++        val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
++
++        dao.favoritar(favorito)
++        assertEquals(listOf(favorito), dao.favoritos(1).first())
++
++        dao.desfavoritar(contaId = 1, nomeBase = "Globo", categoriaId = -1L)
++        assertEquals(emptyList<CanalFavorito>(), dao.favoritos(1).first())
++    }
+ }
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt
+new file mode 100644
+index 0000000..0fb768a
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt
+@@ -0,0 +1,99 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import android.database.sqlite.SQLiteDatabase
++import androidx.room.Room
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.runTest
++import org.json.JSONObject
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import java.io.File
++
++/**
++ * Testa a `Migration(1, 2)` real (a mesma registrada em `AppIptv.kt`) contra um banco
++ * recriado a partir do schema exportado em `app/schemas/.../1.json`.
++ *
++ * Não usa `androidx.room.testing.MigrationTestHelper`: ele lê o schema como asset Android via
++ * `InstrumentationRegistry`, e neste projeto (unit test Robolectric, sem androidTest/emulador)
++ * o sourceSet de teste não é mesclado nos assets que o Robolectric enxerga — achado real desta
++ * tarefa (`FileNotFoundException: Cannot find the schema file in the assets folder`, mesmo com
++ * `testOptions.unitTests.isIncludeAndroidResources = true` e `sourceSets.test.assets`; a
++ * propriedade `android_merged_assets` gerada pelo AGP só aponta pro merge do variant de
++ * produção, nunca pro sourceSet `test`). Em vez disso, o teste lê o `1.json` como resource de
++ * teste comum (`sourceSets.test.resources`, ver `app/build.gradle.kts`), recria o schema v1 com
++ * o SQL exato que o Room já gerou naquela versão, e abre com o `Room.databaseBuilder` real
++ * (o mesmo builder de produção, com a mesma `Migration` registrada) para migrar de verdade.
++ */
++@RunWith(RobolectricTestRunner::class)
++class MigracaoBancoTest {
++    private var arquivoBanco: File? = null
++
++    @After
++    fun apagarArquivo() {
++        arquivoBanco?.delete()
++    }
++
++    @Test
++    fun `migracao 1 para 2 cria a tabela CanalFavorito sem apagar dados existentes`() = runTest {
++        val arquivo = File.createTempFile("iptv-migracao-teste", ".db")
++        arquivoBanco = arquivo
++        criarBancoVersao1(arquivo)
++
++        val bancoMigrado = Room.databaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java, arquivo.absolutePath)
++            .addMigrations(BancoApp.MIGRACAO_1_2)
++            .allowMainThreadQueries()
++            .build()
++
++        // A Conta inserida na versão 1 continua lá depois da migração (onUpgrade real, não
++        // fallbackToDestructiveMigration).
++        assertEquals("Conta Teste", bancoMigrado.contaDao().ativa()?.nome)
++
++        // A tabela nova existe e aceita favoritar/consultar — não é só o nome na lista de
++        // entities do @Database, o CREATE TABLE da Migration(1, 2) realmente rodou.
++        val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
++        bancoMigrado.catalogoDao().favoritar(favorito)
++        assertEquals(listOf(favorito), bancoMigrado.catalogoDao().favoritos(1).first())
++
++        bancoMigrado.close()
++    }
++}
++
++/** Recria fielmente o schema v1 (`app/schemas/.../1.json`) com uma Conta de teste já inserida. */
++private fun criarBancoVersao1(arquivo: File) {
++    val textoSchema = Thread.currentThread().contextClassLoader!!
++        .getResourceAsStream("io.github.pagmovel.iptvplayer.dados.BancoApp/1.json")!!
++        .bufferedReader()
++        .readText()
++    val schema = JSONObject(textoSchema).getJSONObject("database")
++
++    val db = SQLiteDatabase.openOrCreateDatabase(arquivo, null)
++
++    val setupQueries = schema.getJSONArray("setupQueries")
++    for (i in 0 until setupQueries.length()) {
++        db.execSQL(setupQueries.getString(i))
++    }
++
++    val entidades = schema.getJSONArray("entities")
++    for (i in 0 until entidades.length()) {
++        val entidade = entidades.getJSONObject(i)
++        val tabela = entidade.getString("tableName")
++        db.execSQL(entidade.getString("createSql").replace("\${TABLE_NAME}", tabela))
++        if (entidade.has("contentSyncTriggers")) {
++            val gatilhos = entidade.getJSONArray("contentSyncTriggers")
++            for (j in 0 until gatilhos.length()) {
++                db.execSQL(gatilhos.getString(j))
++            }
++        }
++    }
++
++    db.execSQL(
++        "INSERT INTO Conta (id, nome, servidor, usuario, senhaCifrada, ativa, ultimaCargaEm) " +
++            "VALUES (1, 'Conta Teste', 'http://servidor', 'usuario', X'00', 1, NULL)",
++    )
++    db.version = 1
++    db.close()
++}

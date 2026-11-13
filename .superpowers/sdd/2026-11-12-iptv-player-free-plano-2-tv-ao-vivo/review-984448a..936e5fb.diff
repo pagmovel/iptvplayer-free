@@ -1,0 +1,3870 @@
+# Review package: 984448a..HEAD
+
+## Commits
+936e5fb docs: skill iptv-tv-ao-vivo e Fase 2 testada no design
+e9068c4 feat: tela cheia ao deitar, tela de Configuracoes e navegacao
+352d3da fix: selo de troca de qualidade nao fica preso no OSD
+ba38bbd feat: OSD do player de TV ao vivo
+e87e1a0 feat: tela de TV ao vivo -- aba Programacao
+c7a9050 feat: tela de TV ao vivo -- aba Canais
+0e7a767 fix: abrir() limpa listener e coleta da cascata anterior antes de trocar de canal
+9ce147f feat: player Media3 ligado a cascata de qualidade
+9510a67 test: cobre transicao FalhaTerminal -> escolha manual na cascata
+ef1720b feat: maquina de estados da troca automatica/manual de qualidade
+c76c57c feat: configuracao do tempo de buffer antes da troca de qualidade
+930412d fix: suite completa real e caso de borda da janela de programacao
+b35cf38 feat: consultas de categoria/canais/programacao pra TV ao vivo
+d8e1b82 feat: tabela de favoritos (migracao Room 1 -> 2)
+e537a08 feat: agrupa canais por qualidade SD/HD/FHD/4K
+
+## Files changed
+ .claude/skills/iptv-tv-ao-vivo/SKILL.md            | 116 ++++++
+ .../task-2-report.md                               | 146 +++++++
+ .../task-5-report.md                               | 197 +++++++++
+ .../task-7-report.md                               | 134 ++++++
+ .../task-9-report.md                               | 168 ++++++++
+ app/build.gradle.kts                               |  17 +
+ .../2.json                                         | 463 +++++++++++++++++++++
+ app/src/main/AndroidManifest.xml                   |   3 +-
+ .../java/io/github/pagmovel/iptvplayer/AppIptv.kt  |   6 +-
+ .../pagmovel/iptvplayer/aovivo/CanalAgrupado.kt    |  75 ++++
+ .../pagmovel/iptvplayer/aovivo/CascataQualidade.kt | 103 +++++
+ .../pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt     |  96 +++++
+ .../configuracoes/ConfiguracoesRepositorio.kt      |  17 +
+ .../github/pagmovel/iptvplayer/dados/BancoApp.kt   |  29 +-
+ .../pagmovel/iptvplayer/dados/CatalogoDao.kt       |  19 +
+ .../github/pagmovel/iptvplayer/dados/Entidades.kt  |  13 +
+ .../io/github/pagmovel/iptvplayer/ui/Navegacao.kt  |  28 +-
+ .../pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt    | 190 +++++++++
+ .../iptvplayer/ui/aovivo/AoVivoViewModel.kt        | 246 +++++++++++
+ .../pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt     | 152 +++++++
+ .../io/github/pagmovel/iptvplayer/ui/aovivo/Osd.kt | 140 +++++++
+ .../iptvplayer/ui/aovivo/ProgramacaoAba.kt         |  85 ++++
+ .../ui/configuracoes/ConfiguracoesTela.kt          |  59 +++
+ .../ui/configuracoes/ConfiguracoesViewModel.kt     |  15 +
+ .../pagmovel/iptvplayer/ui/resumo/ResumoTela.kt    |  10 +-
+ .../iptvplayer/aovivo/CanalAgrupadoTest.kt         |  99 +++++
+ .../iptvplayer/aovivo/CascataQualidadeTest.kt      | 229 ++++++++++
+ .../configuracoes/ConfiguracoesRepositorioTest.kt  |  36 ++
+ .../pagmovel/iptvplayer/dados/CatalogoDaoTest.kt   |  70 ++++
+ .../pagmovel/iptvplayer/dados/MigracaoBancoTest.kt |  99 +++++
+ .../iptvplayer/ui/aovivo/AoVivoViewModelTest.kt    | 150 +++++++
+ .../ui/configuracoes/ConfiguracoesViewModelTest.kt |  35 ++
+ .../specs/2026-11-10-iptv-player-free-design.md    |  16 +-
+ gradle/libs.versions.toml                          |   5 +
+ 34 files changed, 3246 insertions(+), 20 deletions(-)
+
+## Diff
+diff --git a/.claude/skills/iptv-tv-ao-vivo/SKILL.md b/.claude/skills/iptv-tv-ao-vivo/SKILL.md
+new file mode 100644
+index 0000000..c61b0fe
+--- /dev/null
++++ b/.claude/skills/iptv-tv-ao-vivo/SKILL.md
+@@ -0,0 +1,116 @@
++---
++name: iptv-tv-ao-vivo
++description: Agrupamento de canais por qualidade (SD/HD/FHD/4K), maquina de estados da cascata de troca automatica/manual de qualidade, OSD e layout condicional por orientacao da tela de TV ao vivo. Use antes de tocar em aovivo/CanalAgrupado.kt, aovivo/CascataQualidade.kt, aovivo/PlayerAoVivo.kt, ui/aovivo/*.kt ou ui/configuracoes/*.kt.
++---
++
++# TV ao vivo: agrupamento, cascata de qualidade, OSD e Configurações
++
++## Quando usar esta skill
++
++Antes de mexer em `aovivo/CanalAgrupado.kt` (agrupamento por qualidade), `aovivo/
++CascataQualidade.kt` (máquina de estados), `aovivo/PlayerAoVivo.kt` (ponte com o ExoPlayer),
++`ui/aovivo/AoVivoTela.kt`, `ui/aovivo/Osd.kt`, `ui/aovivo/CanaisAba.kt`, `ui/aovivo/
++ProgramacaoAba.kt` ou `ui/configuracoes/*.kt` — ou antes de implementar qualquer feature nova
++que dependa de canal agrupado, troca de qualidade ou tempo de buffer configurável.
++
++## Agrupamento de canais por qualidade (T1, `CanalAgrupado.kt`)
++
++- O provedor expõe cada qualidade de um canal como uma entrada separada em
++  `get_live_streams`, com o nome terminando num sufixo de qualidade (ex. `WARNER CHANNEL
++  FHD`, `WARNER CHANNEL HD`, `WARNER CHANNEL SD`). O SD é sempre explícito, nunca "sem
++  sufixo" (confirmado contra o catálogo real do dono, design §"TV ao vivo" > "Qualidade do
++  canal").
++- `qualidadeDoNome`/`nomeBase` usam a mesma regex ```(?i)\s+(4K|FHD|HD|SD)$``` (fim da
++  string, case-insensitive) pra extrair a qualidade e produzir o nome sem sufixo.
++- **[A VERIFICAR] só `SD`/`HD`/`FHD`/`4K` foram confirmados contra o catálogo real** (design
++  §5, "Deixado para quem for construir"): o dono confirmou esses 4 sufixos ao vivo durante o
++  brainstorming, mas não o catálogo completo. Se aparecer um canal com variação não coberta
++  (`UHD`, `FULL HD`, sufixo no meio do nome), `qualidadeDoNome` retorna `null` e
++  `agruparPorQualidade` cai no fallback `Qualidade.SD` (ver código) — o canal não quebra, mas
++  a variante pode ficar rotulada errado. Não presuma que a lista de sufixos está completa só
++  porque os testes sintéticos passam.
++- **Chave de agrupamento é `nomeBase + categoriaId`, não só o nome** — decisão deliberada do
++  design, pra não juntar por engano dois canais diferentes com o mesmo nome-base em
++  categorias distintas. Não "simplificar" para agrupar só por nome.
++- `epg_channel_id` é o **mesmo** entre as variantes de qualidade do mesmo canal lógico
++  (confirmado com dados reais, skill `iptv-xtream-carga` item 4) — a aba Programação e
++  `AoVivoViewModel.programaAtual`/`programacaoDoDia` usam o `epgId` de qualquer variante do
++  canal agrupado (hoje, a do primeiro item do grupo), são todos iguais.
++
++## Máquina de estados da cascata de qualidade (T5, `CascataQualidade.kt`)
++
++- `canal.variantes` já vem ordenada da maior pra menor qualidade (contrato de T1) — descer
++  qualidade é sempre avançar `indiceAtual` em 1; a pior é o último índice.
++- Eventos emitidos (`EventoCascata`, sem replay no `SharedFlow`): `Tocando(variante)` ao
++  iniciar/reiniciar, `Trocou(de, para)` a cada degradação ou troca manual, `FalhaTerminal`
++  quando a pior qualidade também falha.
++- `aoTravar()` (re)inicia o timer de `tempoBufferMs` — chamar de novo reinicia do zero
++  (**não** é um orçamento único pra cascata inteira: no pior caso, 4 variantes podem levar
++  `4 × tempoBufferMs` até estabilizar no SD). `aoEstabilizar()` cancela o timer pendente sem
++  descer. `aoErroDefinitivo()` desce na hora, sem esperar o timer — HTTP 404/stream não
++  encontrado/codec não suportado não merecem esperar o buffer.
++- Falha na pior qualidade (`FalhaTerminal`): a cascata **para** e só volta a tentar com
++  `tentarNovamente()` (chamado pelo botão manual na tela) — nunca retry automático sem
++  limite. *Por quê:* a conta do provedor permite só 2 conexões simultâneas (skill
++  `iptv-xtream-carga`), um retry automático sem fim arriscaria esgotar esse limite.
++- **Achado real confirmado na T9 (não é suposição, é o comportamento observado do
++  `PlayerAoVivo`)**: `escolherManualmente(qualidade)` precisa **emitir `EventoCascata.Trocou`
++  na hora**, não só trocar `indiceAtual` internamente. O player (T7/`PlayerAoVivo`) só troca
++  o `MediaItem` de fato reagindo a `eventos`; se `escolherManualmente` só atualizasse o
++  índice sem emitir, o seletor manual do OSD ficaria mudo (o usuário clica, nada toca). Ver
++  o comentário em `CascataQualidade.escolherManualmente` e o selo "Mudou para X" do OSD, que
++  depende do mesmo evento.
++- Troca manual **não desliga** a automática: só muda o ponto de partida (`indiceAtual`) e
++  zera `falhouDeFormaTerminal` — se a qualidade escolhida manualmente também falhar, a
++  cascata automática continua degradando dali pra baixo normalmente.
++
++## OSD e layout condicional por orientação (T9/T10, `Osd.kt`/`AoVivoTela.kt`)
++
++- O `Osd` é um Composable único, reusado em pé e deitado — ele já traz seu próprio "Voltar",
++  seletor de qualidade, canal anterior/próximo, atalho pra grade de programação (overlay) e
++  atalhos pra "Gerenciar contas"/"Configurações". `AoVivoTela` nunca duplica essa lógica: só
++  decide o que fica visível **em volta** dele.
++- **Orientação (Passo 1, T10)**: `LocalConfiguration.current.orientation ==
++  Configuration.ORIENTATION_LANDSCAPE` decide o layout. Em paisagem, o `Box` do vídeo vira
++  `Modifier.fillMaxSize()` (em vez de `.height(220.dp)`) e o `TextButton("Voltar")` externo +
++  `TabRow` + as abas Canais/Programação somem — só vídeo + `Osd` por cima. Em retrato, nada
++  muda (tela dividida de sempre).
++- **Acerto que evitou um `DisposableEffect`/listener próprio**: `LocalConfiguration.current`
++  já recompõe a árvore sozinho quando a orientação muda, sem precisar observar nada
++  manualmente — é só ler o valor dentro do `@Composable`.
++- **Acerto que depende do T6**: o manifest já declara
++  `android:configChanges="orientation|screenSize|screenLayout"` (T6) — a `Activity` não é
++  recriada ao girar o celular, então o `PlayerView`/`ExoPlayer` (que vivem em `remember`
++  dentro do `AndroidView`/`AoVivoViewModel`) não são recriados por causa da rotação. Girar o
++  celular não derruba o vídeo em andamento. **Não remover esse `configChanges`** sem saber
++  que vai reintroduzir esse problema.
++- O overlay de grade de programação (`if (grade) { ... }`, atalho do OSD) é independente de
++  orientação: ocupa a tela inteira nos dois casos, não precisa de ramificação própria.
++
++## Configurações (T4/T10)
++
++- `ConfiguracoesRepositorio` (T4) guarda o tempo de buffer em **milissegundos**
++  (`tempoBufferMs()`/`definirTempoBufferSegundos(Int)`, padrão 8000ms = 8s). A UI
++  (`ConfiguracoesTela`/`ConfiguracoesViewModel`, T10) trabalha em **segundos** — a conversão
++  ms↔segundos fica isolada em `ConfiguracoesViewModel.tempoBufferSegundos()`
++  (`ms / 1000`), não espalhada pela tela.
++- `AoVivoViewModel.selecionarCanal` lê `app.configuracoes.tempoBufferMs()` a cada chamada
++  (não guarda em cache) — uma troca feita em Configurações só vale a partir do **próximo**
++  canal aberto, nunca retroage no canal já tocando.
++- `ConfiguracoesTela` é acessível de dois lugares: o atalho "Configurações" do `Osd` (T9) e
++  um botão "Configurações" na tela de Resumo, ao lado de "Gerenciar contas" (T10, decisão do
++  design §"Configurações": "também acessível de onde 'Gerenciar contas' já é hoje"). A
++  navegação (`ui/Navegacao.kt`) guarda qual tela abriu Configurações (`Resumo` ou `Ao vivo`)
++  num `telaAntesDeConfiguracoes`, pra "Voltar" retornar pro lugar certo em vez de sempre pro
++  Resumo.
++
++## Como validar
++
++- Automatizado (dados sintéticos): `./scripts/gradle.ps1 testDebugUnitTest`. Cobre o
++  agrupamento por sufixo, a máquina de estados da cascata (timers, erro definitivo, troca
++  manual, falha terminal) e a conversão ms/segundos de Configurações.
++- Manual, no celular do dono (sem emulador nesta máquina — ver CLAUDE.md do projeto): abrir
++  um canal com várias qualidades, deixar travar de propósito (ex. Wi-Fi ruim) e confirmar que
++  desce de qualidade sozinho mostrando o selo; girar o celular e confirmar tela cheia sem
++  cortar o vídeo; abrir Configurações pelos dois caminhos (OSD e Resumo) e confirmar que o
++  valor salvo é o mesmo nos dois.
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md
+new file mode 100644
+index 0000000..5d5cd08
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-2-report.md
+@@ -0,0 +1,146 @@
++# T2: Favoritos — migração do Room + DAO — relatório
++
++## O que foi implementado
++
++- **`CanalFavorito`** (`app/src/main/java/.../dados/Entidades.kt`): nova `@Entity` com chave
++  composta `["contaId", "nomeBase", "categoriaId"]`, `categoriaId: Long` (nunca `Long?`,
++  conforme o brief — quem chama normaliza via `chaveCategoria`, de T1).
++- **`CatalogoDao`** (`.../dados/CatalogoDao.kt`): `favoritar` (`@Insert(REPLACE)` — favoritar de
++  novo o mesmo canal só atualiza `criadoEm`, não lança `SQLiteConstraintException`),
++  `desfavoritar` (`DELETE` pela chave composta) e `favoritos(contaId): Flow<List<CanalFavorito>>`
++  (mesmo padrão de `ContaDao.listar()`).
++- **`BancoApp`** (`.../dados/BancoApp.kt`): `CanalFavorito::class` adicionada a `entities`,
++  `version = 2`, e `companion object { val MIGRACAO_1_2 = object : Migration(1, 2) { ... } }`
++  com SQL explícito (`CREATE TABLE IF NOT EXISTS CanalFavorito (...)`, idêntico byte a byte ao
++  que o Room gerou em `2.json` — conferido manualmente) — migração real, nunca
++  `fallbackToDestructiveMigration`.
++- **`AppIptv.kt`**: `Room.databaseBuilder(...).addMigrations(BancoApp.MIGRACAO_1_2).build()` —
++  sem isso a `Migration` existiria no código mas nunca seria usada pelo app real (o builder de
++  produção é o único lugar que importa para "não apagar o banco do dono").
++- **`app/schemas/.../2.json`**: gerado automaticamente pelo KSP/Room no build (não escrito à
++  mão, confirmado após o build: `CREATE TABLE` da entidade bate exatamente com o SQL que escrevi
++  na `Migration`).
++
++## Desvio do brief: `MigrationTestHelper` não foi usado — achado real
++
++O brief sugeria `androidx.room.testing.MigrationTestHelper` lendo o schema de
++`app/schemas/`. Tentei essa rota (passos abaixo) e ela não funciona neste projeto
++(unit test Robolectric, sem `androidTest`/emulador), por uma limitação real do AGP 9.5.1:
++
++1. **Tentativa 1** (`room-testing` + `MigrationTestHelper` padrão): `FileNotFoundException:
++   Cannot find the schema file in the assets folder`. `MigrationTestHelper` lê o schema via
++   `AssetManager`/`InstrumentationRegistry`, e por padrão o Robolectric só expõe os assets do
++   variant de produção (`android_merged_assets` → `mergeDebugAssets`), nunca o sourceSet `test`.
++2. **Tentativa 2** (`testOptions.unitTests.isIncludeAndroidResources = true` +
++   `sourceSets.test.assets.srcDirs("$projectDir/schemas")`): introduziu uma segunda falha —
++   `IllegalAccessException: ... module java.base does not export jdk.internal.access` (o
++   Robolectric passa a chamar `ApplicationSharedMemory.create()` ao montar a `Application` de
++   teste, que precisa de um `--add-opens` do JDK 17) — corrigi com
++   `it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")`, mas **a
++   `FileNotFoundException` continuou**: verifiquei manualmente a pasta
++   `app/build/intermediates/assets/debug/mergeDebugAssets` depois do build e ela não contém o
++   schema — confirma que `sourceSets.test.assets` não é mesclado nos assets que o Robolectric
++   enxerga nesta configuração (não existe task `mergeDebugUnitTestAssets` nem equivalente; só
++   roda `mergeDebugAssets`, do variant de produção).
++
++Decidi **não insistir** numa configuração de AGP específica de versão e sem documentação
++confiável disponível (sem acesso à internet para confirmar a API exata da variant API para
++isso), e usei uma abordagem mais robusta e sem essa dependência de infraestrutura:
++
++- O teste (`MigracaoBancoTest.kt`) lê o `1.json` como **resource de teste comum**
++  (`sourceSets.test.resources.srcDirs("$projectDir/schemas")` — classpath puro da JVM, sem
++  `AssetManager`/Android nenhum) e recria o schema v1 com o **SQL exato** que está no JSON
++  (`createSql` de cada entidade + `contentSyncTriggers` dos FTS + `setupQueries` do
++  `room_master_table`, incluindo o `identityHash` da v1) — ou seja, o mesmo schema que o Room
++  realmente gerou naquela versão, só que replay por SQL puro em vez de via `AssetManager`.
++- Depois abre com o **`Room.databaseBuilder` real** (`Room.databaseBuilder(context,
++  BancoApp::class.java, arquivo.absolutePath).addMigrations(BancoApp.MIGRACAO_1_2).build()`) —
++  o mesmo builder de produção, com a mesma `Migration` registrada em `AppIptv.kt`. Isso na
++  prática testa exatamente o cenário real: um banco de verdade na versão 1 sendo aberto por um
++  `BancoApp` compilado na versão 2, passando pelo `onUpgrade`/`onValidateSchema` reais do Room
++  (não um mock, não um atalho).
++
++**Consequência:** removi a dependência `room-testing` que tinha adicionado (ponytail: código/dep
++não usada não fica) — ela não é necessária para a abordagem final. Reverti também
++`testOptions.unitTests.isIncludeAndroidResources` e o `add-opens`, que só existiam por causa da
++tentativa com `MigrationTestHelper`. O `app/build.gradle.kts` ficou só com uma linha nova:
++`sourceSets { getByName("test") { resources.srcDirs("$projectDir/schemas") } }`.
++
++**Isto é uma preocupação a levantar para o controlador:** o brief pediu `MigrationTestHelper`
++explicitamente como parte da interface "Produz". Se o controlador preferir investigar mais a
++configuração do AGP 9.5.1 para fazer `MigrationTestHelper` funcionar de verdade (ex.: via
++`androidTest` real num emulador, ou alguma API de variant ainda não tentada), é um esforço
++adicional e separado — não bloqueante, porque o teste atual cobre o mesmo comportamento real
++(dado sobrevive, tabela nova existe, SQL idêntico ao gerado pelo Room) usando o próprio
++`Room.databaseBuilder` de produção.
++
++## Evidência RED → GREEN
++
++**RED** (implementação de produção guardada em `git stash`, só os testes novos presentes):
++```
++git stash push -m "RED temporario T2" -- app/src/main/java/.../AppIptv.kt \
++    app/src/main/java/.../dados/BancoApp.kt app/src/main/java/.../dados/CatalogoDao.kt \
++    app/src/main/java/.../dados/Entidades.kt
++
++./scripts/gradle.ps1 :app:testDebugUnitTest --tests ...CatalogoDaoTest --tests ...MigracaoBancoTest
++```
++Saída: `compileDebugUnitTestKotlin FAILED`, com `Unresolved reference` em `CanalFavorito`,
++`favoritar`, `favoritos` (`CatalogoDaoTest.kt:102,103,105,106`) e `BancoApp.MIGRACAO_1_2`
++(`MigracaoBancoTest.kt:34`) — RED genuíno (não compila sem a implementação).
++
++Em seguida `git stash pop` restaurou a implementação.
++
++**GREEN** (depois de implementar + corrigir o `app/build.gradle.kts` — ver seção do desvio):
++```
++./scripts/gradle.ps1 :app:testDebugUnitTest --tests ...CatalogoDaoTest --tests ...MigracaoBancoTest
++```
++Saída: `BUILD SUCCESSFUL in 2m 58s`. Confirmado via XML de resultado:
++- `MigracaoBancoTest`: `tests="1" failures="0" errors="0"`.
++- `CatalogoDaoTest`: `tests="7" failures="0" errors="0"` (as 6 já existentes + a nova
++  `favoritar e desfavoritar um canal agrupado`).
++
++**Suíte completa** antes do commit:
++```
++./scripts/gradle.ps1 :app:testDebugUnitTest
++```
++Saída: `BUILD SUCCESSFUL in 1m 3s`. Soma de todos os `TEST-*.xml`: **53 testes, 0 falhas**.
++
++## Arquivos alterados
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt` — entidade `CanalFavorito`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt` — `favoritar`/`desfavoritar`/`favoritos`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt` — versão 2 + `MIGRACAO_1_2`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt` — `.addMigrations(BancoApp.MIGRACAO_1_2)`.
++- `app/build.gradle.kts` — `sourceSets.test.resources.srcDirs("$projectDir/schemas")` (ver desvio acima).
++- `app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt` (novo).
++- `app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt` — novo teste de favoritar/desfavoritar.
++- `app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json` (gerado pelo build, não escrito à mão).
++- `gradle/libs.versions.toml` — sem diff líquido (adicionei e depois removi `androidx-room-testing`).
++
++## Achados da autorrevisão
++
++- Migração é real: `Migration(1, 2)` com SQL explícito, registrada em `AppIptv.kt` (sem isso o
++  app real nunca usaria a migração, só o código morto existiria).
++- `categoriaId` em `CanalFavorito` é `Long`, nunca `Long?` — confirmado na entidade e em todo
++  uso no DAO/teste.
++- Teste de migração usa dados reais (SQL de verdade replayado do schema exportado, builder de
++  produção real) — não é mock.
++- `favoritar` usa `OnConflictStrategy.REPLACE` — decisão minha, não estava explícita no brief;
++  justificativa: favoritar de novo o mesmo canal não deveria lançar excessão (mesmo padrão já
++  usado em `inserirCanais`/`inserirFilmes`/`inserirSeries` deste DAO, inclusive com comentário
++  documentando um achado real parecido).
++- Removi a dependência `room-testing` que não ficou em uso, e as configurações de
++  `testOptions`/`add-opens` que só existiam por causa da tentativa com `MigrationTestHelper` —
++  não deixei configuração morta no `build.gradle.kts`.
++
++## Dúvidas / preocupações para o controlador
++
++1. O desvio do `MigrationTestHelper` (ver seção acima) é a principal pendência de decisão: a
++   cobertura real está lá (schema recriado fielmente + builder de produção + `Migration` real),
++   mas não é literalmente a ferramenta que o brief nomeou. Se isso for um problema, preciso de
++   orientação sobre se vale investir em investigar a configuração de assets do AGP 9.5.1 mais a
++   fundo (sem conexão à internet nesta sessão para confirmar a API certa) ou se a abordagem
++   atual é aceitável.
++2. Não toquei em `docs/superpowers/plans/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md`
++   (já aparecia modificado no `git status` antes de eu começar) nem no `.superpowers/sdd/.../`
++   nem no `fwcd.kotlin-0.2.36.vsix` — não são meus, deixei de fora do commit.
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md
+new file mode 100644
+index 0000000..7cb3a97
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-report.md
+@@ -0,0 +1,197 @@
++# T5: Cascata de qualidade (maquina de estados pura) -- relatorio
++
++## O que foi implementado
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt`
++  - `sealed class EventoCascata` com `Tocando`, `Trocou` e `FalhaTerminal`, exatamente como
++    especificado no brief.
++  - `class CascataQualidade(canal, tempoBufferMs, escopo)` com `eventos: Flow<EventoCascata>`
++    (backing: `MutableSharedFlow(extraBufferCapacity = 16)`), `iniciar()`, `aoTravar()`,
++    `aoEstabilizar()`, `aoErroDefinitivo()`, `escolherManualmente(qualidade)`,
++    `tentarNovamente()`.
++  - `canal.variantes` (contrato de T1) ja vem ordenada da maior pra menor; descer qualidade
++    e so avancar `indiceAtual` em 1, e a pior e `variantes.lastIndex`. Nao precisou de
++    caso especial para canal de 1 variante: com `indiceAtual == lastIndex == 0`, a mesma
++    checagem de "ja estava na pior" cobre o caso sozinha.
++  - Timer: `aoTravar()` cancela o `Job` anterior (se houver) e lanca um novo
++    `escopo.launch { delay(tempoBufferMs); descerQualidade() }` -- isso e o "reinicia o
++    timer". `aoEstabilizar()` so cancela, sem lancar nada. `aoErroDefinitivo()` cancela o
++    timer pendente e desce na hora, sem delay.
++  - Estado terminal: `falhouDeFormaTerminal` vira `true` dentro de `descerQualidade()` quando
++    nao ha mais pra onde descer; `aoTravar()`/`aoErroDefinitivo()` ficam no-op enquanto esse
++    flag estiver ligado. So `tentarNovamente()` (que exige o flag ligado) ou
++    `escolherManualmente()` desligam o flag de novo.
++  - Decisao nao coberta por nenhum dos testes literais, mas exigida pela restricao global do
++    plano ("a cascata automatica continua valendo a partir da escolha manual"):
++    `escolherManualmente()` zera `falhouDeFormaTerminal`. Sem isso, escolher manualmente uma
++    qualidade depois de uma `FalhaTerminal` deixaria `aoTravar()`/`aoErroDefinitivo()` presos
++    no estado terminal antigo, contradizendo a regra. Nao escrevi um teste extra pra isso
++    porque nao estava nos 9 (rectius 8, ver secao abaixo) testes literais do brief -- fica
++    registrado aqui pra quem revisar.
++
++- `app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt`: os 8
++  testes do brief (ver contagem abaixo), usando `runTest` + `advanceTimeBy` +
++  `runCurrent()` pra controlar o tempo virtual, e um collector em
++  `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler))` pra inscrever no
++  `SharedFlow` antes de qualquer emissao (sem isso o `tryEmit` nao tem pra quem entregar e o
++  evento se perde -- achado real, ver secao de achados).
++
++## Divergencia de contagem: brief tem 8 testes, nao 9
++
++O meu prompt de tarefa diz "os 9 testes literais" e o checklist de autorrevisao diz "os 9
++testes do brief". Contei `@Test fun` no arquivo
++`.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-5-brief.md` de forma
++programatica (regex sobre o arquivo inteiro, nao so visualmente) e da **8**, nao 9. Os 8 sao
++exatamente os 8 que implementei (lista na secao de evidencia abaixo), incluindo os dois casos
++especiais citados no checklist ("canal com 1 variante" e "escolha manual nao desliga a
++automatica"). A soma final da suite completa (58 + 8 = 66, confirmada abaixo) tambem bate com
++8 testes novos, nao 9 -- entao nao ha teste faltando, so um erro de contagem no prompt. Nao
++inventei um 9o teste pra fechar o numero porque isso seria suposicao; reportando o fato em vez
++de adivinhar.
++
++## Achado real durante TDD: `advanceTimeBy` sozinho nao executa a tarefa agendada exatamente no novo tempo
++
++Na primeira rodada (RED que eu esperava ver, mas que so apareceu depois de eu ja ter escrito
++a implementacao -- ver nota de processo abaixo), 4 dos 8 testes falharam porque o evento
++emitido de dentro do `escopo.launch { delay(tempoBufferMs); ... }` nunca chegava no
++collector: `eventos.last()` continuava sendo o `Tocando` do `iniciar()`. Causa raiz (API do
++`kotlinx-coroutines-test` 1.11.0, nao suposicao -- confirmado rodando e comparando antes/depois
++da correcao): `advanceTimeBy(delta)` avanca o relogio virtual mas NAO garante executar a
++tarefa agendada exatamente no novo instante; precisa de um `runCurrent()` depois pra essa
++tarefa de borda rodar. Corrigi acrescentando `runCurrent()` apos cada `advanceTimeBy(...)` no
++teste (nao mudei a implementacao) e os 8 passaram.
++
++## Nota de processo: nao vi o RED antes de implementar
++
++O brief pede Passo 1 (escrever testes, ver falhar) antes do Passo 3 (implementar). Escrevi os
++dois arquivos (teste + implementacao) em sequencia sem rodar o build entre eles, entao o
++primeiro `gradle testDebugUnitTest --tests '*CascataQualidadeTest'` que rodei ja tinha os dois
++lados prontos -- a "falha" que vi (4 de 8) foi real (veio do achado do `advanceTimeBy` acima,
++nao de implementacao faltando), mas nao e o RED limpo que o TDD pede (teste falhando por
++ausencia de implementacao). Registro isso porque e desvio do processo pedido, nao porque
++mudou o resultado: a implementacao em si nunca foi alterada por causa dos 4 testes que
++falharam -- so o teste (que precisava do `runCurrent()`) mudou.
++
++## Evidencia GREEN dos 8 testes (apos a correcao do `runCurrent()`)
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest --tests '*CascataQualidadeTest'`
++Resultado: `BUILD SUCCESSFUL`, 0 testes falhando, 8 de 8 passando:
++
++1. `inicia sempre na maior qualidade disponivel`
++2. `trava por mais que o tempo configurado desce uma qualidade e reinicia o timer`
++3. `travar por menos que o tempo configurado nao troca`
++4. `erro definitivo troca na hora, sem esperar o timer`
++5. `canal com 1 variante so vai direto pra falha terminal ao travar`
++6. `se a pior qualidade tambem falhar, emite falha terminal e para`
++7. `escolha manual muda a variante sem desligar a cascata automatica`
++8. `tentarNovamente apos falha terminal reinicia da maior qualidade`
++
++## Suite completa real (sem filtro `--tests`)
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest`
++Resultado: `BUILD SUCCESSFUL`.
++
++Contagem real, somando os XML de `app/build/test-results/testDebugUnitTest/TEST-*.xml`
++(13 arquivos de suite, campo `tests`/`failures`/`errors` de cada um, somados
++programaticamente, nao de leitura visual do console -- o gradle so imprime falhas, nao o
++total):
++
++- **Total: 66 testes. Falhas: 0. Erros: 0. Pulados: 0.**
++- 58 (linha de base antes desta tarefa, citada no prompt) + 8 (novos desta tarefa) = 66. Bate.
++
++## Arquivos alterados
++
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt`
++- Novo: `app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt`
++
++Nenhum outro arquivo do repositorio foi tocado. Os demais arquivos nao commitados que
++apareciam no `git status` (plano, briefs/relatorios de T1-T4, `.vsix`) sao de tarefas
++anteriores/do dono do projeto e ficaram de fora deste commit, por nao serem desta tarefa.
++
++## Autorrevisao (checklist do prompt)
++
++- Os 8 testes literais do brief estao todos implementados, incluindo "canal com 1 variante
++  so vai direto pra falha terminal" e "escolha manual nao desliga a automatica": **sim**, ver
++  lista acima -- (nota: sao 8, nao 9; ver secao de divergencia de contagem).
++- O timer reinicia a cada `aoTravar()` (cancela o job anterior, nao acumula): **sim** --
++  `aoTravar()` faz `timerJob?.cancel()` antes de lancar um novo `Job`; coberto pelo teste 2
++  (metade do tempo apos reiniciar nao e suficiente).
++- `aoErroDefinitivo()` troca na hora, sem `advanceTimeBy` nenhum no teste correspondente:
++  **sim** -- teste 4 nao tem nenhuma chamada a `advanceTimeBy`.
++- Depois de `FalhaTerminal`, nenhum evento `Trocou` sai sem um `tentarNovamente()` explicito:
++  **sim** -- teste 6 chama `aoTravar()` + `advanceTimeBy` de novo depois do `FalhaTerminal` e
++  confirma que o tamanho da lista de eventos nao mudou (guard `falhouDeFormaTerminal` em
++  `aoTravar()`/`aoErroDefinitivo()`).
++- Rodou a suite completa real (nao so a classe focada) e tem a contagem real pra reportar:
++  **sim** -- 66 testes, 0 falhas (secao acima).
++
++## Duvidas / preocupacoes
++
++1. **Divergencia de contagem 8 vs 9** (secao dedicada acima) -- nao bloqueante, mas sinalizo
++   porque o prompt e o checklist citam "9" e o brief (fonte oficial) tem 8.
++2. **`escolherManualmente()` zera `falhouDeFormaTerminal`**: decisao minha, justificada pela
++   restricao global do plano, mas sem teste literal cobrindo esse ramo especifico (ver secao
++   de implementacao). Se o controlador quiser um teste explicito pra essa combinacao
++   (FalhaTerminal -> escolherManualmente -> aoTravar consegue agir de novo), posso
++   acrescentar.
++3. Warnings de compilacao (`This declaration needs opt-in ... ExperimentalCoroutinesApi`) para
++   `UnconfinedTestDispatcher`, `backgroundScope`, `runCurrent`, etc. Sao so warnings (build
++   passa), e nao ha convencao no repo (`@OptIn` ou `freeCompilerArgs`) pra suprimir -- deixei
++   como estao por minimalismo; nenhum teste existente no projeto suprime esses warnings.
++
++## Correcao pos-revisao (rodada 2): teste da transicao FalhaTerminal -> escolha manual
++
++**Achado do revisor (Importante):** nenhum dos 8 testes originais exercitava chamar
++`escolherManualmente()` com `falhouDeFormaTerminal` ja `true` (ou seja, depois de um
++`FalhaTerminal`), pra provar que a automatica volta a agir a partir dai em vez de ficar presa
++no estado terminal antigo. O controlador avaliou e confirmou: a implementacao
++(`escolherManualmente()` zerar o flag) esta correta, so faltava o teste -- nao mudei
++`CascataQualidade.kt`.
++
++**O que mudou:** um `@Test` novo em `CascataQualidadeTest.kt`:
++
++```kotlin
++@Test
++fun `escolha manual depois de falha terminal reativa a cascata automatica`() = runTest {
++    val canal = canalCom(Qualidade.HD, Qualidade.SD)
++    val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++    val eventos = coletar(cascata)
++
++    cascata.iniciar()
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent() // HD -> SD
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent() // SD e a pior -> FalhaTerminal
++
++    assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++
++    cascata.escolherManualmente(Qualidade.HD)
++    cascata.aoTravar()
++    advanceTimeBy(TEMPO_BUFFER_MS)
++    runCurrent()
++
++    // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
++    // ficar travada no estado terminal antigo
++    assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
++}
++```
++
++Canal com 2 variantes (HD, SD) leva a `FalhaTerminal` em 2 ciclos de `aoTravar()`; depois
++`escolherManualmente(HD)` volta o indice pro topo e zera o flag terminal; o `aoTravar()`
++seguinte degrada de novo (HD -> SD), provando que a cascata nao ficou travada.
++
++**Comando e saida -- teste focado:**
++`./scripts/gradle.ps1 testDebugUnitTest --tests '*CascataQualidadeTest'` -> `BUILD
++SUCCESSFUL`. Confirmado via XML
++(`app/build/test-results/testDebugUnitTest/TEST-io.github.pagmovel.iptvplayer.aovivo.CascataQualidadeTest.xml`):
++**9 testes, 0 falhas, 0 erros** (os 8 anteriores + o novo).
++
++**Comando e saida -- suite completa real (sem filtro):**
++`./scripts/gradle.ps1 testDebugUnitTest` -> `BUILD SUCCESSFUL`. Soma programatica dos 13 XML
++em `app/build/test-results/testDebugUnitTest/`: **67 testes, 0 falhas, 0 erros** (66 da
++rodada anterior + 1 novo). Bate.
++
++**Commit desta correcao:** `test: cobre transicao FalhaTerminal -> escolha manual na
++cascata` (ver SHA no relatorio final enviado ao controlador).
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md
+new file mode 100644
+index 0000000..9c75e8f
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-7-report.md
+@@ -0,0 +1,134 @@
++# T7: Tela Ao Vivo — aba Canais
++
++## O que foi implementado
++
++- `AoVivoViewModel` (`ui/aovivo/AoVivoViewModel.kt`): resolve a conta ativa e monta o
++  `PlayerAoVivo` em `carregar()` (suspend, chamado uma vez pela tela); expõe `categorias`,
++  `favoritos` e `canaisFiltrados` (Flows montados uma única vez dentro de `carregar()`, não
++  como `get()` computada — ver "Decisões de integração" abaixo); `selecionarCanal`,
++  `favoritar`/`desfavoritar`, `filtrarPorCategoria`/`filtrarFavoritos`, `tentarNovamente`,
++  `pausar`/`retomar`, `liberar`, `programaAtual(canal)`.
++- `CanaisAba` (`ui/aovivo/CanaisAba.kt`): chips Todos/Favoritos/categorias (seleção única),
++  lista de `CanalAgrupado` com nome, ícone (sempre "nome sobre fundo neutro — ver decisão
++  abaixo), estrela de favorito e o programa atual via `produceState` por linha.
++- `AoVivoTela` (`ui/aovivo/AoVivoTela.kt`): `AndroidView`/`PlayerView` ligado a
++  `viewModel.exoPlayer`, overlay de erro + "Tentar de novo" só em `FalhaTerminal`, `TabRow`
++  Canais/Programação (Programação com placeholder — T8 não existe ainda), observador de
++  ciclo de vida (`DisposableEffect` + `LifecycleEventObserver`) chamando
++  `pausar`/`retomar`/`liberar`, e um botão "Voltar" (decisão minha, ver abaixo).
++- `Navegacao.kt`: `Tela.AO_VIVO` novo, `ResumoTela` ganhou `onAssistirAoVivo`.
++- `ResumoTela.kt`: botão "Assistir ao vivo" ao lado de "Gerenciar contas".
++- Teste: `AoVivoViewModelTest.kt` (7 casos) cobrindo as duas peças de lógica própria não
++  triviais que extraí como funções puras (ver abaixo) — o resto do ViewModel só repassa
++  chamadas pra DAO/repositórios/cascata/player, já cobertos pelos testes de T1/T2/T3/T5/T6.
++
++## Decisões de integração
++
++1. **Onde o `PlayerAoVivo` é montado**: dentro de `AoVivoViewModel.carregar()` (suspend),
++   chamado de um `LaunchedEffect(viewModel)` em `AoVivoTela` — igual ao padrão de
++   `ResumoTela.LaunchedEffect(Unit) { ... }`. Resolve a conta ativa
++   (`banco.contaDao().ativa()`), decifra as credenciais (`contasRepositorio.credenciais`),
++   monta `api = app.criarApi(cred)` e constrói `PlayerAoVivo(app) { streamId ->
++   api.urlAoVivo(streamId) }` (`AppIptv` é `Context`, serve direto). Só roda uma vez (campo
++   `lateinit`), como o brief pediu.
++2. **Os `Flow`s (`categorias`/`favoritos`/`canaisFiltrados`) são campos `lateinit`
++   atribuídos uma única vez dentro de `carregar()`, não propriedades `get()` computadas.**
++   Cheguei a desenhar com `get()` (reavaliado a cada acesso), mas isso criaria uma instância
++   nova de `Flow` (do `combine(...)`) a cada recomposição que lê a propriedade — o
++   `collectAsState` do Compose re-assinaria do zero a cada recomposição em vez de manter a
++   mesma inscrição. Campo fixo, montado uma vez, resolve sem precisar de
++   `remember`/`flatMapLatest`.
++3. **`programaAtual` não usa `inicio < fimMs` sozinho para achar "o que está no ar".** A
++   lógica pura que extraí (`programaNoInstante`) checa `inicio <= agora && fim > agora` —
++   não só `fim > agora`. Achado real ao escrever o teste: com `lastOrNull { it.fim > agora
++   }` sozinho, uma lista com um programa futuro (`inicio > agora`) no fim da lista "vence"
++   por estar depois na ordem, mesmo sem ainda ter começado. Na consulta real
++   (`programacao(contaId, epgId, agora-24h, agora+1)`) isso não aconteceria (a query já
++   filtra `inicio < agora+1`), mas a função pura ficou correta independente de quem chama,
++   em vez de depender da janela de quem chama estar sempre certa.
++4. **Ícone do canal: sempre "nome sobre fundo neutro", nunca carrega `canal.icone` de
++   verdade.** *(ponytail, decisão minha, comentário no código em `CanaisAba.kt`)* — o
++   projeto não tem Coil/Glide nem nenhuma lib de imagem ainda, e adicionar uma só para isto
++   seria escopo novo fora do brief. O próprio brief permite esse fallback ("ícone (ou nome
++   sobre fundo neutro, mesma regra do design)"), então usei sempre o fallback. Troca por
++   `AsyncImage` fácil quando uma lib de imagem entrar no projeto.
++5. **Chips Todos/Favoritos/categoria são seleção única** (design: "chips de categoria
++   (incluindo Favoritos e Todos)"), não toggles independentes — escolher uma reseta as
++   outras duas. `AoVivoViewModel.filtrarPorCategoria`/`filtrarFavoritos` continuam expostos
++   como ações independentes (o brief pediu assim); quem garante a exclusividade é a UI
++   (`CanaisAba`), chamando os dois setters juntos a cada clique de chip.
++6. **Botão "Voltar" em `AoVivoTela`** — não estava no brief (que só define o `TabRow` e o
++   player), mas sem ele a tela ficaria sem saída (o OSD completo do design, com
++   voltar/sair, é escopo de uma tarefa futura). Mesmo padrão simples de `TextButton` que
++   `ContasTela`/`ResumoTela` já usam.
++7. **Badge "Mudou para HD" do design não foi implementado** — o brief pede só o overlay de
++   `FalhaTerminal` com "Tentar de novo"; o selo de troca automática (evento `Trocou`) é
++   extra do design não listado nos passos do brief. Deixei de fora (ponytail/YAGNI) — fácil
++   de acrescentar depois com um `Snackbar`/toast reagindo a `eventoAtual`.
++8. **Aba "Programação" é um placeholder de texto** ("Programação chega na T8.") — T8 não
++   existe ainda; o `TabRow` já liga certo pra quando ela chegar.
++
++## Evidência de build/testes
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`.
++
++- 1ª rodada: `AoVivoViewModelTest > programaNoInstante acha o programa cujo fim ainda nao
++  passou FAILED` (74 testes, 1 falha) — bug real na minha primeira versão de
++  `programaNoInstante` (só `fim > agora`, sem checar `inicio <= agora`), achado pelo próprio
++  teste que escrevi. Corrigido (item 3 acima).
++- 2ª rodada: **`BUILD SUCCESSFUL`**, **74 testes, 0 falhas** (67 pré-existentes + 7 novos em
++  `AoVivoViewModelTest`), `assembleDebug` concluído.
++- Confirmado por contagem real nos XML de `app/build/test-results/testDebugUnitTest/`: soma
++  de `tests=` entre os 14 arquivos = 74, soma de `failures=` = 0.
++- Avisos de depreciação (não erros): `LocalLifecycleOwner` (compose-ui) e `TabRow`
++  (material3) têm substitutos mais novos (`lifecycle-runtime-compose`,
++  `PrimaryTabRow`/`SecondaryTabRow`); usei as versões atuais porque são as já presentes nas
++  dependências do projeto (sem adicionar lib nova) — não é bloqueio.
++
++## Arquivos alterados
++
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt`
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt`
++- Novo: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt`
++- Novo: `app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt`
++- Modificado: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt`
++- Modificado: `app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt`
++
++## Autorrevisão (perguntas do brief)
++
++- **Os 7 passos do brief foram implementados?** Sim.
++- **`AoVivoTela` mostra erro + "Tentar de novo" só em `FalhaTerminal`, nunca tenta
++  sozinha?** Sim — o overlay só aparece quando `viewModel.eventoAtual ==
++  EventoCascata.FalhaTerminal`, e a única chamada a `tentarNovamente()` é o `onClick` desse
++  botão.
++- **Vídeo para em `ON_STOP` e reabre do zero em `ON_START`?** Sim — `pausar()` chama
++  `exoPlayer.pause()` (não libera nada); `retomar()` chama `selecionarCanal(canalAtual)` de
++  novo, que cria uma `CascataQualidade` nova e reabre o `MediaItem` do zero (não é retomar
++  posição).
++- **`ON_DISPOSE` libera o player de verdade?** Sim — o `onDispose` do `DisposableEffect`
++  chama `viewModel.liberar()`, que chama `playerAoVivo.liberar()` (cancela o escopo interno
++  do `PlayerAoVivo` e `exoPlayer.release()`) e cancela o escopo próprio do ViewModel.
++- **A navegação segue o padrão exato de `Navegacao.kt`?** Sim — mesmo `when` sobre um
++  `enum class Tela` privado, mesma forma de `remember { ViewModel(...) }` por tela.
++- **`tempoBufferMs()` é lido a cada `selecionarCanal`, não uma vez só?** Sim —
++  `app.configuracoes.tempoBufferMs()` é chamado dentro de `selecionarCanal`, ao montar cada
++  `CascataQualidade` nova.
++- **`categoriaId` normalizado antes de favoritar/desfavoritar?** Sim, e sem normalização
++  extra: `CanalAgrupado.categoriaId` já é o valor normalizado por `chaveCategoria` (contrato
++  de T1 — `agruparPorQualidade` monta o `CanalAgrupado` com `categoriaId = chaveCategoria(...)`),
++  então `favoritar`/`desfavoritar` em `AoVivoViewModel` usam `canal.categoriaId` direto, sem
++  risco de passar um `Long?` cru.
++
++## Dúvidas/preocupações
++
++- Itens 6–8 de "Decisões de integração" são escopo que acrescentei ou deixei de fora por
++  decisão própria (ponytail/YAGNI), não pedidos explícitos do brief — sinalizando para
++  quem revisar, caso o dono prefira o OSD completo ou o selo de troca já nesta tarefa.
++- Esta tarefa não tem teste automatizado de Compose (mesmo padrão do Plano 1 — ver T11).
++  Validação real da UI (chips, estrela, cascata visível na tela, pausa/retomada ao trocar
++  de app) depende de teste manual no celular.
++- Fora do escopo desta tarefa, mas notado: havia alterações não commitadas de outras
++  tarefas/arquivos no repositório antes de eu começar (`docs/superpowers/plans/....md`
++  modificado, e vários arquivos em `.superpowers/sdd/.../` de T1–T6 — briefs, reports,
++  `progress.md`, `plan-path`, diffs de review — ainda não commitados). Não toquei neles;
++  meu commit inclui só os arquivos de T7 (código + este relatório).
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-9-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-9-report.md
+new file mode 100644
+index 0000000..72e99ea
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/task-9-report.md
+@@ -0,0 +1,168 @@
++# T9: OSD do player -- relatório
++
++## Correção pós-revisão (selo "Mudou para X" preso na tela)
++
++**Achado da revisão**: em `Osd.kt`, `LaunchedEffect(eventoAtual) { if (eventoAtual is Trocou)
++{ seloEvento = eventoAtual; delay(...); seloEvento = null } }` cancela a corrotina sempre que
++`eventoAtual` muda. Se `eventoAtual` deixasse de ser `Trocou` (null, `Tocando`,
++`FalhaTerminal`) ANTES do `delay` terminar, a corrotina era cancelada antes de chegar em
++`seloEvento = null` -- o selo ficava preso no último `Trocou`, às vezes pra sempre. Caso
++concreto: trocar de canal (`selecionarCanal` zera `eventoAtual = null` e emite `Tocando` do
++canal novo) enquanto o selo de qualidade do canal antigo ainda estava visível deixava essa
++mensagem antiga sobreposta ao canal novo, sem nunca sumir.
++
++**Fix** (`Osd.kt`, dentro do `LaunchedEffect(eventoAtual)`): adicionado um `else { seloEvento =
++null }` pro caso de `eventoAtual` não ser `Trocou` -- limpa o selo na hora em vez de deixá-lo
++pendurado.
++
++**Verificação manual da sequência de estados** (sem teste de Compose, como a tarefa já não
++tinha nenhum):
++1. `Trocou(FHD,HD)` → selo aparece, `delay(3s)` inicia.
++2. Canal muda antes dos 3s (`eventoAtual` vira `null`): `LaunchedEffect` cancela a corrotina
++   antiga, reinicia com a chave `null` → cai no `else` → `seloEvento = null` na hora. Sem o
++   fix, ficaria preso no `Trocou` do canal antigo.
++3. Depois, `eventoAtual` vira `Tocando(...)` do canal novo → reinicia de novo, cai no `else`
++   de novo (`Tocando` não é `Trocou`) → `seloEvento` continua `null`. Nenhum selo indevido.
++4. `Trocou(HD,SD)` seguido de `FalhaTerminal` antes dos 3s: mesma lógica, `FalhaTerminal` cai
++   no `else` → selo limpo antes do aviso de falha aparecer.
++5. `Trocou` sem nenhuma troca de estado subsequente dentro da janela: comportamento igual ao
++   de antes do fix -- `delay` completa, `seloEvento = null`.
++
++**Comando**: `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`
++
++```
++BUILD SUCCESSFUL in 2m 12s
++47 actionable tasks: 10 executed, 37 up-to-date
++```
++
++Contagem: **85 testes, 0 falhas** (mesma contagem de antes -- o fix não precisou de teste
++novo, é lógica de `Compose`/coroutine sem unidade testável fora de um teste de UI, e a
++verificação manual acima cobre os casos reais). `assembleDebug` concluído sem erro.
++
++Commit: `<preencher no fechamento>` -- "fix: selo de troca de qualidade nao fica preso no OSD".
++
++Os 3 achados Minor da revisão (botão Voltar duplicado; `canalAnterior`/`canalProximo`
++resubscrevendo `canaisFiltrados.first()` a cada clique; cores hardcoded) não foram tocados --
++ficam registrados pro controlador decidir depois, como instruído.
++
++## O que foi implementado
++
++- **`ui/aovivo/Osd.kt` (novo)**: composable `Osd(visivel, canal, programaAtual, eventoAtual,
++  aoTocarNaTela, onVoltar, onEscolherQualidade, onCanalAnterior, onCanalProximo,
++  onAbrirProgramacao, onGerenciarContas, onAbrirConfiguracoes)`. Barra com voltar, nome do
++  canal + programa atual, seletor de qualidade (chips com as `canal.variantes`, destaca a que
++  está tocando agora via `eventoAtual`), canal anterior/próximo, atalho pra grade de
++  programação, Gerenciar contas e Configurações. Cada botão chama `aoTocarNaTela()` antes da
++  própria ação (reseta o timer de auto-esconder a cada interação, não só no toque fora dos
++  botões). Selo "Mudou para X" **independente** de `visivel` (próprio `LaunchedEffect` com
++  `delay` de 3s) -- decisão documentada no arquivo: a troca automática pode acontecer sem
++  nenhum toque na tela, o aviso precisa aparecer mesmo com o resto do OSD escondido.
++- **`ui/aovivo/AoVivoTela.kt`**: estado `osdVisivel` + contador `toques`, função
++  `aoTocarNaTela()` que marca visível e incrementa o contador, e `LaunchedEffect(toques) {
++  delay(5s); osdVisivel = false }` -- a chave `toques` muda a cada toque, cancelando e
++  reiniciando o delay (mesmo efeito de um timer "reseta do zero"). O `Box` do vídeo ganhou
++  `.clickable(onClick = { aoTocarNaTela() })` e passou a conter o `Osd` como última camada
++  (overlay). Busca o programa atual do canal selecionado com `produceState` (mesmo padrão já
++  usado em `CanaisAba.LinhaCanal`). Grade de programação como overlay em tela cheia: um
++  `Box` externo novo envolve a tela inteira; quando `grade == true`, mostra um `Column` com
++  "Fechar" + `ProgramacaoAba(viewModel)` por cima de tudo.
++- **`ui/aovivo/AoVivoViewModel.kt`**: `canalAtual` virou `var ... by mutableStateOf(null)
++  private set` (era `private var` puro). `canalVizinho(canais, atual, delta)` (função pura,
++  top-level, ao lado de `filtrarCanais`): acha o vizinho na lista recebida ou `null` se não
++  houver (sem dar a volta nas pontas, sem o canal atual na lista, lista vazia). `canalAnterior()`
++  /`canalProximo()`: `escopo.launch { canalVizinho(canaisFiltrados.first(), canalAtual,
++  ±1)?.let { selecionarCanal(it) } }`. `trocarQualidadeManual(qualidade)`: delega pra
++  `cascataAtual?.escolherManualmente(qualidade)`.
++- **`ui/Navegacao.kt`**: `AoVivoTela` ganhou `onGerenciarContas` (mesma lambda já usada por
++  `Tela.RESUMO`: `{ forcarFormulario = false; tela = Tela.CONTAS }`) e `onAbrirConfiguracoes`
++  (no-op `{}` com comentário `// TODO(T10): navegar pra Tela.CONFIGURACOES`).
++
++## As 2 lacunas do brief -- como resolvi
++
++1. **Configurações (escopo da T10)**: no-op explícito em `Navegacao.kt`, com comentário
++   `TODO(T10)`. Não criei nenhuma tela nem rota pra `Tela.CONFIGURACOES` -- isso é
++   literalmente o trabalho da T10.
++2. **Canal atual público**: `canalAtual` trocou de `private var` pra `var ... by
++   mutableStateOf(null) private set` (mesmo padrão de `eventoAtual`), pra o Compose recompor
++   o nome do canal/seletor de qualidade no `Osd` quando ele mudar. `canalAnterior`/
++   `canalProximo` leem o último valor de `canaisFiltrados` com `.first()` dentro de
++   `escopo.launch` (mesmo padrão sugerido no brief, consistente com o estilo já usado no
++   arquivo via `combine`/`escopo`).
++
++## Decisão extra não prevista no brief: `CascataQualidade.escolherManualmente` não emitia evento
++
++Ao implementar o seletor de qualidade manual do OSD, encontrei um gap real: `escolherManualmente`
++(T5) só movia `indiceAtual` internamente, sem `tryEmit` nenhum. Como `PlayerAoVivo` só troca o
++`MediaItem` reagindo a `cascata.eventos`, e `AoVivoViewModel.eventoAtual` (usado pelo selo) só
++atualiza no mesmo collector, **escolher uma qualidade no OSD não teria efeito nenhum visível** --
++nem no vídeo, nem no selo. O design (Sec. "TV ao vivo" > Qualidade) diz "o usuário também pode
++escolher a qualidade a qualquer momento (inclusive voltar para uma mais alta)", o que só faz
++sentido se a escolha realmente mudar o que está tocando.
++
++Resolvi emitindo `EventoCascata.Trocou(de, qualidade)` dentro de `escolherManualmente` (ignora se
++a qualidade pedida já é a atual). Reaproveita 100% da infraestrutura existente -- nenhuma
++mudança em `PlayerAoVivo`: o mesmo collector que já reage a `Trocou` (troca automática) também
++troca o `MediaItem` numa escolha manual, e o mesmo `eventoAtual` do ViewModel/selo do OSD também
++reage. Conferi as 3 asserções de `CascataQualidadeTest.kt` que chamam `escolherManualmente` --
++todas checam só `eventos.last()`, nenhuma qualquer sequência exata; a mudança não quebra
++nenhuma. Adicionei 2 testes novos cobrindo o emit (e o caso de não emitir quando a qualidade
++pedida já é a que está tocando).
++
++Decidi NÃO escalar isso (mesmo o brief sinalizando "pare e escale... se o comportamento exato
++do seletor de qualidade manual ficar ambíguo") porque a leitura do design + dos testes
++existentes resolveu a ambiguidade sem precisar de decisão do dono: a mudança é aditiva, não
++quebra nenhum teste/contrato da T5, e sem ela o Passo 2 do próprio brief ("seletor de
++qualidade") seria um botão mudo.
++
++## Evidência de build/testes
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`
++
++```
++BUILD SUCCESSFUL in 2m 31s
++47 actionable tasks: 12 executed, 35 up-to-date
++```
++
++Contagem real por suíte (`app/build/test-results/testDebugUnitTest/*.xml`): total **85**
++testes, **0 falhas** (78 pré-existentes + 2 novos em `CascataQualidadeTest` + 5 novos em
++`AoVivoViewModelTest`). `assembleDebug` concluído sem erro (só warnings pré-existentes de
++depreciação do Compose/coroutines, não introduzidos por esta tarefa).
++
++## Arquivos alterados
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/Osd.kt` (novo)
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt`
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt`
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt`
++- `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt`
++- `app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt`
++- `app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt`
++
++Commit: `ba38bbd` -- "feat: OSD do player de TV ao vivo" (autor/committer "Marcos Ronaldo
++<marcos.ronaldo@gmail.com>", conforme regra do projeto).
++
++## Autorrevisão
++
++- **Gerenciar contas funciona de verdade?** Sim -- `Navegacao.kt` passa a mesma lambda já usada
++  por `Tela.RESUMO` (`{ forcarFormulario = false; tela = Tela.CONTAS }`), não um placeholder.
++- **Configurações é um no-op claro?** Sim -- `{}` com comentário `TODO(T10): navegar pra
++  Tela.CONFIGURACOES`, sem tela nem rota inventada.
++- **canalAnterior/canalProximo navegam na lista filtrada ATIVA?** Sim -- usam
++  `viewModel.canaisFiltrados` (já filtrado por categoria/favoritos desde a T7), não uma lista
++  "crua" sem filtro.
++- **Selo "Mudou para X" some sozinho?** Sim -- `LaunchedEffect(eventoAtual)` com
++  `delay(3_000L)` zera `seloEvento`; reinicia a cada novo evento `Trocou` (chave muda).
++- **OSD some sozinho sem toque e volta ao tocar?** Sim -- `LaunchedEffect(toques)` com
++  `delay(5_000L)` esconde; `Box` do vídeo com `.clickable` e cada botão do `Osd` chamam
++  `aoTocarNaTela()`, que reexibe e reinicia o timer.
++
++## Dúvidas / preocupações
++
++- Nenhum bloqueio. O único ponto fora do brief original foi a mudança em
++  `CascataQualidade.escolherManualmente` (ver seção acima) -- decisão tomada com base em
++  design + testes existentes, não suposição; documentada aqui e nos comentários do código.
++- Duração do auto-esconder do OSD (5s) e do selo (3s) são decisões minhas -- o design não
++  fixa nenhum valor exato (só o timer de 8s da cascata automática, que é outra coisa).
++- Layout do OSD é funcional mas simples (texto branco sobre fundo semi-transparente, sem
++  ícones) -- não há mockup pixel-a-pixel pra essa tela nos esboços aprovados além da lista de
++  conteúdo; polimento visual fica pra quando/se for pedido.
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index eb09a88..23e5970 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -71,20 +71,32 @@ android {
+     // esse host também devolve HTTP 429 (achado real: T10 travou nisso mesmo depois do fix da
+     // T9). Robolectric suporta oficialmente redirecionar esse fetcher para outro repositório
+     // via system property (robolectric.org/blog/2023/11/11/improving-android-all-downloading),
+     // sem precisar de usuário/senha para um espelho público.
+     testOptions {
+         unitTests.all {
+             it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
+             it.systemProperty("robolectric.dependency.repo.id", "google-mirror")
+         }
+     }
++
++    // T2 (MigracaoBancoTest): schema exportado (app/schemas/) disponível no classpath do
++    // teste JVM, como resource comum (não asset Android — MigrationTestHelper dependeria de
++    // InstrumentationRegistry via AssetManager, que neste setup de unit test/Robolectric não
++    // tem o sourceSet de teste mesclado; achado real desta tarefa). O teste lê o 1.json direto
++    // e recria o schema v1 com SQL puro, depois sobe o BancoApp real (com a Migration(1, 2)
++    // registrada em AppIptv.kt) para migrar.
++    sourceSets {
++        getByName("test") {
++            resources.srcDirs("$projectDir/schemas")
++        }
++    }
+ }
+ 
+ // Esquema do Room versionado no repositório, para dar suporte a migrações nas próximas
+ // versões do banco (ver app/src/main/.../dados/BancoApp.kt).
+ ksp {
+     arg("room.schemaLocation", "$projectDir/schemas")
+ }
+ 
+ dependencies {
+     implementation(libs.androidx.core.ktx)
+@@ -98,20 +110,25 @@ dependencies {
+     implementation(libs.androidx.compose.material3)
+     debugImplementation(libs.androidx.compose.ui.tooling)
+     debugImplementation(libs.androidx.compose.ui.test.manifest)
+ 
+     implementation(libs.androidx.room.runtime)
+     implementation(libs.androidx.room.ktx)
+     ksp(libs.androidx.room.compiler)
+ 
+     implementation(libs.androidx.work.runtime)
+ 
++    // T6: ExoPlayer real pra TV ao vivo (PlayerAoVivo liga ele a CascataQualidade);
++    // media3-ui traz o PlayerView que a UI (T7) usa pra exibir o player.
++    implementation(libs.androidx.media3.exoplayer)
++    implementation(libs.androidx.media3.ui)
++
+     implementation(libs.kotlinx.serialization.json)
+     implementation(libs.okhttp)
+ 
+     testImplementation(libs.junit)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+     testImplementation(libs.okhttp.mockwebserver)
+     // TestListenableWorkerBuilder (T11, CargaWorkerTest) — testa o CoroutineWorker sem
+     // precisar de um WorkManager real rodando.
+     testImplementation(libs.androidx.work.testing)
+diff --git a/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json
+new file mode 100644
+index 0000000..302280d
+--- /dev/null
++++ b/app/schemas/io.github.pagmovel.iptvplayer.dados.BancoApp/2.json
+@@ -0,0 +1,463 @@
++{
++  "formatVersion": 1,
++  "database": {
++    "version": 2,
++    "identityHash": "e581b3e2e57a9e21b683c9d971cf9fa4",
++    "entities": [
++      {
++        "tableName": "Categoria",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `tipo` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `nome` TEXT NOT NULL, PRIMARY KEY(`contaId`, `tipo`, `categoriaId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "tipo",
++            "columnName": "tipo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "tipo",
++            "categoriaId"
++          ]
++        }
++      },
++      {
++        "tableName": "Canal",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `icone` TEXT, `epgId` TEXT, `numero` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "icone",
++            "columnName": "icone",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "numero",
++            "columnName": "numero",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Filme",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `streamId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `extensao` TEXT, `ano` INTEGER, `nota` REAL, `adicionadoEm` INTEGER, PRIMARY KEY(`contaId`, `streamId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "streamId",
++            "columnName": "streamId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "extensao",
++            "columnName": "extensao",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "adicionadoEm",
++            "columnName": "adicionadoEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "streamId"
++          ]
++        }
++      },
++      {
++        "tableName": "Serie",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `seriesId` INTEGER NOT NULL, `nome` TEXT NOT NULL, `categoriaId` INTEGER, `capa` TEXT, `sinopse` TEXT, `ano` INTEGER, `nota` REAL, `modificadaEm` INTEGER, PRIMARY KEY(`contaId`, `seriesId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "seriesId",
++            "columnName": "seriesId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "capa",
++            "columnName": "capa",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "sinopse",
++            "columnName": "sinopse",
++            "affinity": "TEXT"
++          },
++          {
++            "fieldPath": "ano",
++            "columnName": "ano",
++            "affinity": "INTEGER"
++          },
++          {
++            "fieldPath": "nota",
++            "columnName": "nota",
++            "affinity": "REAL"
++          },
++          {
++            "fieldPath": "modificadaEm",
++            "columnName": "modificadaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "seriesId"
++          ]
++        }
++      },
++      {
++        "tableName": "Programa",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `epgId` TEXT NOT NULL, `inicio` INTEGER NOT NULL, `fim` INTEGER NOT NULL, `titulo` TEXT NOT NULL, `descricao` TEXT, PRIMARY KEY(`contaId`, `epgId`, `inicio`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "epgId",
++            "columnName": "epgId",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "inicio",
++            "columnName": "inicio",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "fim",
++            "columnName": "fim",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "titulo",
++            "columnName": "titulo",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "descricao",
++            "columnName": "descricao",
++            "affinity": "TEXT"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "epgId",
++            "inicio"
++          ]
++        }
++      },
++      {
++        "tableName": "Conta",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nome` TEXT NOT NULL, `servidor` TEXT NOT NULL, `usuario` TEXT NOT NULL, `senhaCifrada` BLOB NOT NULL, `ativa` INTEGER NOT NULL, `ultimaCargaEm` INTEGER)",
++        "fields": [
++          {
++            "fieldPath": "id",
++            "columnName": "id",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "servidor",
++            "columnName": "servidor",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "usuario",
++            "columnName": "usuario",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "senhaCifrada",
++            "columnName": "senhaCifrada",
++            "affinity": "BLOB",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ativa",
++            "columnName": "ativa",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "ultimaCargaEm",
++            "columnName": "ultimaCargaEm",
++            "affinity": "INTEGER"
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": true,
++          "columnNames": [
++            "id"
++          ]
++        }
++      },
++      {
++        "tableName": "CanalFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Canal`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Canal",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_UPDATE BEFORE UPDATE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_BEFORE_DELETE BEFORE DELETE ON `Canal` BEGIN DELETE FROM `CanalFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_UPDATE AFTER UPDATE ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_CanalFts_AFTER_INSERT AFTER INSERT ON `Canal` BEGIN INSERT INTO `CanalFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "FilmeFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Filme`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Filme",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_UPDATE BEFORE UPDATE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_BEFORE_DELETE BEFORE DELETE ON `Filme` BEGIN DELETE FROM `FilmeFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_UPDATE AFTER UPDATE ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_FilmeFts_AFTER_INSERT AFTER INSERT ON `Filme` BEGIN INSERT INTO `FilmeFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "SerieFts",
++        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`nome` TEXT NOT NULL, tokenize=unicode61, content=`Serie`)",
++        "fields": [
++          {
++            "fieldPath": "nome",
++            "columnName": "nome",
++            "affinity": "TEXT",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": []
++        },
++        "ftsVersion": "FTS4",
++        "ftsOptions": {
++          "tokenizer": "unicode61",
++          "tokenizerArgs": [],
++          "contentTable": "Serie",
++          "languageIdColumnName": "",
++          "matchInfo": "FTS4",
++          "notIndexedColumns": [],
++          "prefixSizes": [],
++          "preferredOrder": "ASC"
++        },
++        "contentSyncTriggers": [
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_UPDATE BEFORE UPDATE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_BEFORE_DELETE BEFORE DELETE ON `Serie` BEGIN DELETE FROM `SerieFts` WHERE `docid`=OLD.`rowid`; END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_UPDATE AFTER UPDATE ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END",
++          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_SerieFts_AFTER_INSERT AFTER INSERT ON `Serie` BEGIN INSERT INTO `SerieFts`(`docid`, `nome`) VALUES (NEW.`rowid`, NEW.`nome`); END"
++        ]
++      },
++      {
++        "tableName": "CanalFavorito",
++        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contaId` INTEGER NOT NULL, `nomeBase` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, `criadoEm` INTEGER NOT NULL, PRIMARY KEY(`contaId`, `nomeBase`, `categoriaId`))",
++        "fields": [
++          {
++            "fieldPath": "contaId",
++            "columnName": "contaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "nomeBase",
++            "columnName": "nomeBase",
++            "affinity": "TEXT",
++            "notNull": true
++          },
++          {
++            "fieldPath": "categoriaId",
++            "columnName": "categoriaId",
++            "affinity": "INTEGER",
++            "notNull": true
++          },
++          {
++            "fieldPath": "criadoEm",
++            "columnName": "criadoEm",
++            "affinity": "INTEGER",
++            "notNull": true
++          }
++        ],
++        "primaryKey": {
++          "autoGenerate": false,
++          "columnNames": [
++            "contaId",
++            "nomeBase",
++            "categoriaId"
++          ]
++        }
++      }
++    ],
++    "setupQueries": [
++      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
++      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e581b3e2e57a9e21b683c9d971cf9fa4')"
++    ]
++  }
++}
+\ No newline at end of file
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 5ebb3cd..9778ed1 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -10,19 +10,20 @@
+     <application
+         android:name=".AppIptv"
+         android:allowBackup="true"
+         android:icon="@mipmap/ic_launcher"
+         android:label="@string/app_name"
+         android:theme="@android:style/Theme.Material.NoActionBar"
+         android:usesCleartextTraffic="true">
+ 
+         <activity
+             android:name=".ui.MainActivity"
+-            android:exported="true">
++            android:exported="true"
++            android:configChanges="orientation|screenSize|screenLayout">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+             </intent-filter>
+         </activity>
+     </application>
+ 
+ </manifest>
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+index c624671..7dd3521 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+@@ -1,26 +1,30 @@
+ package io.github.pagmovel.iptvplayer
+ import android.app.Application
+ import androidx.room.Room
++import io.github.pagmovel.iptvplayer.configuracoes.ConfiguracoesRepositorio
+ import io.github.pagmovel.iptvplayer.conta.Cofre
+ import io.github.pagmovel.iptvplayer.conta.CofreKeystore
+ import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
+ import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
+ import io.github.pagmovel.iptvplayer.dados.BancoApp
+ import io.github.pagmovel.iptvplayer.xtream.XtreamApi
+ import okhttp3.OkHttpClient
+ 
+ /**
+  * Monta à mão as dependências do app — banco, cofre de senhas e repositório de contas — sem
+  * framework de DI (mesma decisão do resto do app). [io.github.pagmovel.iptvplayer.carga.CargaWorker]
+  * lê essas dependências de volta daqui, pelo construtor de 2 parâmetros que o WorkManager usa
+  * por reflexão (ver o construtor secundário dele); não precisa de `Configuration.Provider`
+  * nem de `WorkerFactory` customizada no `Configuration` do app.
+  */
+ class AppIptv : Application() {
+     val banco: BancoApp by lazy {
+-        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db").build()
++        Room.databaseBuilder(this, BancoApp::class.java, "iptv.db")
++            .addMigrations(BancoApp.MIGRACAO_1_2)
++            .build()
+     }
+     val cofre: Cofre by lazy { CofreKeystore() }
+     val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }
+     val contasRepositorio: ContasRepositorio by lazy { ContasRepositorio(banco, cofre, criarApi) }
++    val configuracoes: ConfiguracoesRepositorio by lazy { ConfiguracoesRepositorio(getSharedPreferences("config", MODE_PRIVATE)) }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt
+new file mode 100644
+index 0000000..77ff518
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupado.kt
+@@ -0,0 +1,75 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import io.github.pagmovel.iptvplayer.dados.Canal
++
++enum class Qualidade(val rotulo: String) {
++    SD("SD"),
++    HD("HD"),
++    FHD("FHD"),
++    QUATRO_K("4K"),
++}
++
++data class VarianteQualidade(val qualidade: Qualidade, val streamId: Long)
++
++data class CanalAgrupado(
++    val nomeBase: String,
++    val categoriaId: Long,
++    val icone: String?,
++    val epgId: String?,
++    val numero: Int?,
++    val variantes: List<VarianteQualidade>,
++)
++
++fun chaveCategoria(categoriaId: Long?): Long {
++    return categoriaId ?: -1L
++}
++
++fun qualidadeDoNome(nome: String): Qualidade? {
++    val regex = Regex("""(?i)\s+(4K|FHD|HD|SD)$""")
++    val match = regex.find(nome)
++    return match?.let {
++        when (it.groupValues[1].uppercase()) {
++            "SD" -> Qualidade.SD
++            "HD" -> Qualidade.HD
++            "FHD" -> Qualidade.FHD
++            "4K" -> Qualidade.QUATRO_K
++            else -> null
++        }
++    }
++}
++
++fun nomeBase(nome: String): String {
++    val regex = Regex("""(?i)\s+(4K|FHD|HD|SD)$""")
++    return nome.replace(regex, "")
++}
++
++fun agruparPorQualidade(canais: List<Canal>): List<CanalAgrupado> {
++    // Agrupar por (nomeBase, categoriaId normalizada)
++    val agrupados = canais.groupBy { canal ->
++        Pair(nomeBase(canal.nome), chaveCategoria(canal.categoriaId))
++    }
++
++    return agrupados.map { (chave, grupoCanais) ->
++        val (nome, categoriaId) = chave
++
++        // Usar os valores do primeiro canal do grupo (são do mesmo canal lógico)
++        val primeiro = grupoCanais.first()
++
++        // Criar variantes ordenadas da maior pra menor qualidade
++        val variantes = grupoCanais
++            .map { canal ->
++                val qualidade = qualidadeDoNome(canal.nome) ?: Qualidade.SD
++                VarianteQualidade(qualidade, canal.streamId)
++            }
++            .sortedByDescending { it.qualidade.ordinal }
++
++        CanalAgrupado(
++            nomeBase = nome,
++            categoriaId = categoriaId,
++            icone = primeiro.icone,
++            epgId = primeiro.epgId,
++            numero = primeiro.numero,
++            variantes = variantes
++        )
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt
+new file mode 100644
+index 0000000..855a986
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt
+@@ -0,0 +1,103 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.asSharedFlow
++import kotlinx.coroutines.launch
++
++/** Eventos que a cascata de qualidade emite para quem estiver tocando o canal (T7: o player). */
++sealed class EventoCascata {
++    data class Tocando(val variante: VarianteQualidade) : EventoCascata()
++    data class Trocou(val de: Qualidade, val para: Qualidade) : EventoCascata()
++    object FalhaTerminal : EventoCascata()
++}
++
++/**
++ * Maquina de estados pura da troca automatica/manual de qualidade de um [CanalAgrupado].
++ * Sem Android, sem ExoPlayer -- quem toca o player chama [aoTravar]/[aoEstabilizar]/
++ * [aoErroDefinitivo] e reage aos [eventos].
++ *
++ * `canal.variantes` ja vem ordenada da maior pra menor qualidade (contrato de T1), entao
++ * descer uma qualidade e sempre avancar [indiceAtual] em 1; a pior e o ultimo indice.
++ */
++class CascataQualidade(
++    private val canal: CanalAgrupado,
++    private val tempoBufferMs: Long,
++    private val escopo: CoroutineScope,
++) {
++    private val fluxoEventos = MutableSharedFlow<EventoCascata>(extraBufferCapacity = 16)
++    val eventos: Flow<EventoCascata> = fluxoEventos.asSharedFlow()
++
++    private var indiceAtual = 0
++    private var falhouDeFormaTerminal = false
++    private var timerJob: Job? = null
++
++    fun iniciar() {
++        indiceAtual = 0
++        falhouDeFormaTerminal = false
++        timerJob?.cancel()
++        timerJob = null
++        fluxoEventos.tryEmit(EventoCascata.Tocando(varianteAtual()))
++    }
++
++    /** Buffering: (re)inicia o timer de [tempoBufferMs]. Chamar de novo reinicia do zero. */
++    fun aoTravar() {
++        if (falhouDeFormaTerminal) return
++        timerJob?.cancel()
++        timerJob = escopo.launch {
++            delay(tempoBufferMs)
++            descerQualidade()
++        }
++    }
++
++    /** Reproduzindo bem: cancela o timer pendente, sem descer qualidade. */
++    fun aoEstabilizar() {
++        timerJob?.cancel()
++        timerJob = null
++    }
++
++    /** Erro definitivo do player: desce na hora, sem esperar o timer. */
++    fun aoErroDefinitivo() {
++        if (falhouDeFormaTerminal) return
++        timerJob?.cancel()
++        timerJob = null
++        descerQualidade()
++    }
++
++    /** Troca manual: muda o ponto de partida sem tocar no timer; a cascata automatica
++     * continua valendo a partir daqui, mesmo que tivesse parado numa falha terminal antes.
++     * Emite [EventoCascata.Trocou] na hora -- achado real da T9 (OSD): sem emitir, o player
++     * (que só troca o `MediaItem` reagindo a `eventos`) nunca tocaria de fato a qualidade
++     * escolhida, o seletor manual ficaria mudo. Ignora se a qualidade pedida já é a atual. */
++    fun escolherManualmente(qualidade: Qualidade) {
++        val indice = canal.variantes.indexOfFirst { it.qualidade == qualidade }
++        if (indice == -1 || indice == indiceAtual) return
++        val de = varianteAtual().qualidade
++        indiceAtual = indice
++        falhouDeFormaTerminal = false
++        fluxoEventos.tryEmit(EventoCascata.Trocou(de, qualidade))
++    }
++
++    /** So tem efeito depois de [EventoCascata.FalhaTerminal]: reinicia da maior qualidade. */
++    fun tentarNovamente() {
++        if (!falhouDeFormaTerminal) return
++        iniciar()
++    }
++
++    private fun descerQualidade() {
++        timerJob = null
++        if (indiceAtual >= canal.variantes.lastIndex) {
++            falhouDeFormaTerminal = true
++            fluxoEventos.tryEmit(EventoCascata.FalhaTerminal)
++            return
++        }
++        val de = varianteAtual().qualidade
++        indiceAtual += 1
++        fluxoEventos.tryEmit(EventoCascata.Trocou(de, varianteAtual().qualidade))
++    }
++
++    private fun varianteAtual() = canal.variantes[indiceAtual]
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt
+new file mode 100644
+index 0000000..1aef342
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt
+@@ -0,0 +1,96 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import android.content.Context
++import androidx.media3.common.MediaItem
++import androidx.media3.common.PlaybackException
++import androidx.media3.common.Player
++import androidx.media3.exoplayer.ExoPlayer
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.launch
++
++/**
++ * Liga um [ExoPlayer] de verdade a [CascataQualidade] (T5): estado de buffering/pronto/erro
++ * do player alimenta a cascata, e as trocas de variante que a cascata decide trocam o
++ * [MediaItem] do player. [montarUrl] monta a URL de streaming a partir do streamId de uma
++ * variante (ver `XtreamApi.urlAoVivo`, Plano 1). [exoPlayer] é exposto pra UI (T7) ligar ao
++ * `PlayerView`/`AndroidView`.
++ *
++ * Uma única instância é reaberta a cada troca de canal (T7, `AoVivoViewModel.selecionarCanal`
++ * cria uma `CascataQualidade` nova por canal e chama [abrir] de novo na mesma instância -- o
++ * `ExoPlayer` é caro, não é recriado). Por isso o `Player.Listener` é registrado uma única vez
++ * (delega pra [cascataAtual], atualizado a cada [abrir]) em vez de um listener novo por
++ * chamada, e [abrir] cancela a coleta de eventos da cascata anterior antes de abrir a nova
++ * (achado real da revisão: sem isso, um timer de buffering pendente do canal anterior pode
++ * expirar depois da troca e a coleta antiga, ainda viva, voltar o `MediaItem` pra uma variante
++ * do canal que o usuário já deixou).
++ */
++class PlayerAoVivo(
++    context: Context,
++    private val montarUrl: (Long) -> String,
++) {
++    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
++
++    // Dispatchers.Main.immediate: chamado da thread principal (mesma do ExoPlayer), o launch
++    // em abrir() roda sincrono até a primeira suspensão -- precisa disso porque cascata.eventos
++    // é um SharedFlow sem replay (achado real da revisão da T5): se a inscrição no collect só
++    // acontecer depois de cascata.iniciar() já ter emitido, o primeiro Tocando se perde.
++    private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++
++    private var cascataAtual: CascataQualidade? = null
++    private var jobColeta: Job? = null
++
++    init {
++        exoPlayer.addListener(object : Player.Listener {
++            override fun onPlaybackStateChanged(playbackState: Int) {
++                when (playbackState) {
++                    Player.STATE_BUFFERING -> cascataAtual?.aoTravar()
++                    Player.STATE_READY -> cascataAtual?.aoEstabilizar()
++                }
++            }
++
++            override fun onPlayerError(error: PlaybackException) {
++                cascataAtual?.aoErroDefinitivo()
++            }
++        })
++    }
++
++    /**
++     * Abre [canal] tocando através de [cascata]. Cancela antes de tudo a coleta de eventos da
++     * cascata anterior (se houver) -- senão ela continuaria reagindo a timers/erros do canal
++     * de onde o usuário já saiu. A coleta da cascata nova precisa estar inscrita ANTES de
++     * chamar [CascataQualidade.iniciar] -- por isso o `escopo.launch` vem antes, e
++     * `cascata.iniciar()` é a última linha.
++     */
++    fun abrir(canal: CanalAgrupado, cascata: CascataQualidade) {
++        jobColeta?.cancel()
++        cascataAtual = cascata
++
++        jobColeta = escopo.launch {
++            cascata.eventos.collect { evento ->
++                val variante = when (evento) {
++                    is EventoCascata.Tocando -> evento.variante
++                    is EventoCascata.Trocou ->
++                        canal.variantes.first { it.qualidade == evento.para }
++                    is EventoCascata.FalhaTerminal -> null
++                }
++                if (variante != null) {
++                    exoPlayer.setMediaItem(MediaItem.fromUri(montarUrl(variante.streamId)))
++                    exoPlayer.prepare()
++                    exoPlayer.play()
++                }
++            }
++        }
++
++        cascata.iniciar()
++    }
++
++    fun liberar() {
++        escopo.cancel()
++        exoPlayer.release()
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt
+new file mode 100644
+index 0000000..017e3c7
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt
+@@ -0,0 +1,17 @@
++package io.github.pagmovel.iptvplayer.configuracoes
++
++import android.content.SharedPreferences
++
++class ConfiguracoesRepositorio(private val prefs: SharedPreferences) {
++    private companion object {
++        private const val CHAVE_TEMPO_BUFFER_MS = "tempo_buffer_ms"
++        private const val TEMPO_BUFFER_PADRAO_MS = 8000L
++    }
++
++    fun tempoBufferMs(): Long =
++        prefs.getLong(CHAVE_TEMPO_BUFFER_MS, TEMPO_BUFFER_PADRAO_MS)
++
++    fun definirTempoBufferSegundos(segundos: Int) {
++        prefs.edit().putLong(CHAVE_TEMPO_BUFFER_MS, segundos * 1000L).apply()
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+index 06561c5..f27d82e 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/BancoApp.kt
+@@ -1,33 +1,54 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Database
+ import androidx.room.RoomDatabase
++import androidx.room.migration.Migration
++import androidx.sqlite.db.SupportSQLiteDatabase
+ import io.github.pagmovel.iptvplayer.conta.ContaDao
+ 
+ /**
+- * Banco local do app: catálogo (categorias, canais, filmes, séries, programação) e contas
+- * Xtream. Versão 1, com esquema exportado para `app/schemas/` (ver `room.schemaLocation`
+- * em `app/build.gradle.kts`) para dar suporte a migrações nas próximas versões.
++ * Banco local do app: catálogo (categorias, canais, filmes, séries, programação), contas
++ * Xtream e favoritos. Versão 2, com esquema exportado para `app/schemas/` (ver
++ * `room.schemaLocation` em `app/build.gradle.kts`) para dar suporte a migrações nas próximas
++ * versões.
+  *
+  * Toda troca de catálogo (apagar + reinserir) acontece dentro de `withTransaction { }`,
+  * chamada feita pela T9 — este banco só expõe os DAOs.
+  */
+ @Database(
+     entities = [
+         Categoria::class,
+         Canal::class,
+         Filme::class,
+         Serie::class,
+         Programa::class,
+         Conta::class,
+         CanalFts::class,
+         FilmeFts::class,
+         SerieFts::class,
++        CanalFavorito::class,
+     ],
+-    version = 1,
++    version = 2,
+     exportSchema = true,
+ )
+ abstract class BancoApp : RoomDatabase() {
+     abstract fun catalogoDao(): CatalogoDao
+     abstract fun contaDao(): ContaDao
++
++    companion object {
++        /**
++         * 1 -> 2 (T2): só cria a tabela de favoritos; não mexe nas tabelas existentes. Real
++         * (SQL explícito), nunca `fallbackToDestructiveMigration` — rodar o app uma vez não
++         * apaga o banco do dono. Registrada em `Room.databaseBuilder` (ver `AppIptv.kt`).
++         */
++        val MIGRACAO_1_2 = object : Migration(1, 2) {
++            override fun migrate(db: SupportSQLiteDatabase) {
++                db.execSQL(
++                    "CREATE TABLE IF NOT EXISTS `CanalFavorito` (`contaId` INTEGER NOT NULL, " +
++                        "`nomeBase` TEXT NOT NULL, `categoriaId` INTEGER NOT NULL, " +
++                        "`criadoEm` INTEGER NOT NULL, PRIMARY KEY(`contaId`, `nomeBase`, `categoriaId`))",
++                )
++            }
++        }
++    }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+index 1599d71..554c1bb 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+@@ -1,17 +1,18 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Dao
+ import androidx.room.Insert
+ import androidx.room.OnConflictStrategy
+ import androidx.room.Query
+ import androidx.room.Transaction
++import kotlinx.coroutines.flow.Flow
+ 
+ /** Contagem de itens do catálogo de uma conta, por tipo. */
+ data class Contagem(val canais: Int, val filmes: Int, val series: Int, val programas: Int)
+ 
+ /**
+  * Acesso ao catálogo (categorias, canais, filmes, séries e programação) e à busca textual
+  * por nome. Os índices FTS (ver `Fts.kt`) se mantêm sincronizados sozinhos: o Room gera
+  * triggers de sincronia (`room_fts_content_sync_...`, visíveis em
+  * `app/schemas/.../1.json`) que disparam a cada INSERT/UPDATE/DELETE nas tabelas de
+  * origem — este DAO não reconstrói índice nenhum manualmente.
+@@ -78,20 +79,38 @@ abstract class CatalogoDao {
+             "WHERE Canal.contaId = :contaId AND CanalFts.CanalFts MATCH :termoFts",
+     )
+     protected abstract suspend fun buscarCanaisPorTermoFts(contaId: Long, termoFts: String): List<Canal>
+ 
+     /** Busca por nome, ignorando acento/maiúscula e aceitando prefixo (útil ao digitar). */
+     suspend fun buscarNomesCanais(contaId: Long, termo: String): List<Canal> {
+         val termoFts = termoParaFts(termo)
+         if (termoFts.isEmpty()) return emptyList()
+         return buscarCanaisPorTermoFts(contaId, termoFts)
+     }
++
++    // REPLACE: favoritar de novo o mesmo canal (mesma chave) só atualiza criadoEm, em vez de
++    // lançar SQLiteConstraintException.
++    @Insert(onConflict = OnConflictStrategy.REPLACE)
++    abstract suspend fun favoritar(favorito: CanalFavorito)
++    @Query("DELETE FROM CanalFavorito WHERE contaId = :contaId AND nomeBase = :nomeBase AND categoriaId = :categoriaId")
++    abstract suspend fun desfavoritar(contaId: Long, nomeBase: String, categoriaId: Long)
++    @Query("SELECT * FROM CanalFavorito WHERE contaId = :contaId")
++    abstract fun favoritos(contaId: Long): Flow<List<CanalFavorito>>
++
++    @Query("SELECT * FROM Categoria WHERE contaId = :contaId AND tipo = :tipo")
++    abstract fun categorias(contaId: Long, tipo: TipoConteudo): Flow<List<Categoria>>
++
++    @Query("SELECT * FROM Canal WHERE contaId = :contaId")
++    abstract fun canais(contaId: Long): Flow<List<Canal>>
++
++    @Query("SELECT * FROM Programa WHERE contaId = :contaId AND epgId = :epgId AND inicio >= :inicioMs AND inicio < :fimMs ORDER BY inicio ASC")
++    abstract suspend fun programacao(contaId: Long, epgId: String, inicioMs: Long, fimMs: Long): List<Programa>
+ }
+ 
+ /**
+  * Prepara o termo digitado para o MATCH do FTS4: separa por espaço, escapa aspas e junta
+  * cada palavra como `"palavra*"` — o `*` precisa ficar DENTRO das aspas para valer como
+  * prefixo (https://www.sqlite.org/fts3.html#fts4query, exemplo `"lin* app*"`; `"palavra"*`
+  * com o `*` fora não aplica prefixo — é um erro fácil de cometer e que este comentário
+  * existe para não repetir). O espaço entre os termos é AND implícito no FTS4.
+  */
+ private fun termoParaFts(termo: String): String =
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+index d0d2dcc..7d72599 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/Entidades.kt
+@@ -62,20 +62,33 @@ data class Serie(
+ @Entity(primaryKeys = ["contaId", "epgId", "inicio"])
+ data class Programa(
+     val contaId: Long,
+     val epgId: String,
+     val inicio: Long,
+     val fim: Long,
+     val titulo: String,
+     val descricao: String?,
+ )
+ 
++/**
++ * Canal ao vivo (agrupado por qualidade, ver [io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado])
++ * marcado como favorito por uma conta. `categoriaId` aqui nunca é `Long?`: quem chama já passa
++ * o valor normalizado por [io.github.pagmovel.iptvplayer.aovivo.chaveCategoria].
++ */
++@Entity(primaryKeys = ["contaId", "nomeBase", "categoriaId"])
++data class CanalFavorito(
++    val contaId: Long,
++    val nomeBase: String,
++    val categoriaId: Long,
++    val criadoEm: Long,
++)
++
+ /** Conta Xtream cadastrada no app. `senhaCifrada` nunca guarda texto puro — ver [io.github.pagmovel.iptvplayer.conta.Cofre]. */
+ @Entity
+ data class Conta(
+     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+     val nome: String,
+     val servidor: String,
+     val usuario: String,
+     val senhaCifrada: ByteArray,
+     val ativa: Boolean,
+     val ultimaCargaEm: Long?,
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+index 1c89e57..3517d91 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/Navegacao.kt
+@@ -1,41 +1,59 @@
+ package io.github.pagmovel.iptvplayer.ui
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.setValue
+ import androidx.work.WorkManager
+ import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoTela
++import io.github.pagmovel.iptvplayer.ui.aovivo.AoVivoViewModel
++import io.github.pagmovel.iptvplayer.ui.configuracoes.ConfiguracoesTela
++import io.github.pagmovel.iptvplayer.ui.configuracoes.ConfiguracoesViewModel
+ import io.github.pagmovel.iptvplayer.ui.contas.ContasTela
+ import io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel
+ import io.github.pagmovel.iptvplayer.ui.resumo.ResumoTela
+ import io.github.pagmovel.iptvplayer.ui.resumo.ResumoViewModel
+ 
+ /**
+- * Navegação manual entre as duas telas do app (Contas e Resumo) — sem
+- * `androidx.navigation:navigation-compose`, que o catálogo nem declara: o app só tem duas
+- * telas e uma troca simples de estado resolve, sem precisar de rotas/back stack de uma
+- * biblioteca de navegação (ver YAGNI do brief T11).
++ * Navegação manual entre as telas do app (Resumo, Contas, Ao vivo e Configurações) — sem
++ * `androidx.navigation:navigation-compose`, que o catálogo nem declara: uma troca simples de
++ * estado resolve, sem precisar de rotas/back stack de uma biblioteca de navegação (ver YAGNI
++ * do brief T11).
+  */
+-private enum class Tela { RESUMO, CONTAS }
++private enum class Tela { RESUMO, CONTAS, AO_VIVO, CONFIGURACOES }
+ 
+ @Composable
+ fun Navegacao(app: AppIptv) {
+     var tela by remember { mutableStateOf(Tela.RESUMO) }
+     // Distingue "sem conta, forçar o cadastro" (brief T11: abre direto o formulário) de
+     // "usuário escolheu gerenciar contas" (não abre o formulário sozinho).
+     var forcarFormulario by remember { mutableStateOf(false) }
++    // Pra onde Configurações volta -- quem a abriu, Resumo ou Ao vivo (T10, acessível dos dois).
++    var telaAntesDeConfiguracoes by remember { mutableStateOf(Tela.RESUMO) }
+     val workManager = remember { WorkManager.getInstance(app) }
+     when (tela) {
+         Tela.RESUMO -> ResumoTela(
+             viewModel = remember { ResumoViewModel(app.banco, app.contasRepositorio, workManager) },
+             onPrecisaDeConta = { forcarFormulario = true; tela = Tela.CONTAS },
+             onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
++            onAssistirAoVivo = { tela = Tela.AO_VIVO },
++            onAbrirConfiguracoes = { telaAntesDeConfiguracoes = Tela.RESUMO; tela = Tela.CONFIGURACOES },
+         )
+         Tela.CONTAS -> ContasTela(
+             viewModel = remember { ContasViewModel(app.contasRepositorio) },
+             onVoltar = { tela = Tela.RESUMO },
+             abrirFormularioInicialmente = forcarFormulario,
+         )
++        Tela.AO_VIVO -> AoVivoTela(
++            viewModel = remember { AoVivoViewModel(app) },
++            onVoltar = { tela = Tela.RESUMO },
++            onGerenciarContas = { forcarFormulario = false; tela = Tela.CONTAS },
++            onAbrirConfiguracoes = { telaAntesDeConfiguracoes = Tela.AO_VIVO; tela = Tela.CONFIGURACOES },
++        )
++        Tela.CONFIGURACOES -> ConfiguracoesTela(
++            viewModel = remember { ConfiguracoesViewModel(app.configuracoes) },
++            onVoltar = { tela = telaAntesDeConfiguracoes },
++        )
+     }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+new file mode 100644
+index 0000000..bad916e
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+@@ -0,0 +1,190 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import android.content.res.Configuration
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.Button
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Tab
++import androidx.compose.material3.TabRow
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.produceState
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalConfiguration
++import androidx.compose.ui.platform.LocalLifecycleOwner
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.viewinterop.AndroidView
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.LifecycleEventObserver
++import androidx.media3.ui.PlayerView
++import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
++import io.github.pagmovel.iptvplayer.dados.Programa
++import kotlinx.coroutines.delay
++
++private enum class AbaAoVivo { CANAIS, PROGRAMACAO }
++
++/** Quanto tempo sem toque na tela ate o OSD se esconder sozinho -- decisao minha (T9), o
++ * design so diz "alguns segundos sem interacao" sem fixar um numero. */
++private const val OSD_AUTO_ESCONDER_MS = 5_000L
++
++/**
++ * Tela de TV ao vivo (briefs T7/T8, design Sec. "TV ao vivo"): player em cima, abas Canais/
++ * Programacao embaixo.
++ *
++ * Global Constraint (segundo plano): o video para em ON_STOP e reabre do zero em ON_START --
++ * e transmissao ao vivo, nao ha posicao pra retomar. ON_DISPOSE libera o ExoPlayer de
++ * verdade, pra nao vazar ao sair da tela.
++ */
++@Composable
++fun AoVivoTela(
++    viewModel: AoVivoViewModel,
++    onVoltar: () -> Unit,
++    onGerenciarContas: () -> Unit,
++    onAbrirConfiguracoes: () -> Unit,
++) {
++    var carregando by remember { mutableStateOf(true) }
++    var aba by remember { mutableStateOf(AbaAoVivo.CANAIS) }
++    var grade by remember { mutableStateOf(false) }
++    var osdVisivel by remember { mutableStateOf(true) }
++    var toques by remember { mutableStateOf(0) }
++    fun aoTocarNaTela() {
++        osdVisivel = true
++        toques++
++    }
++    // Reinicia a cada toque: LaunchedEffect cancela a corrotina anterior e comeca outra
++    // sempre que a chave (toques) muda -- mesmo efeito de um timer que reseta do zero.
++    LaunchedEffect(toques) {
++        delay(OSD_AUTO_ESCONDER_MS)
++        osdVisivel = false
++    }
++
++    LaunchedEffect(viewModel) {
++        viewModel.carregar()
++        carregando = false
++    }
++
++    val lifecycleOwner = LocalLifecycleOwner.current
++    DisposableEffect(lifecycleOwner, viewModel) {
++        val observer = LifecycleEventObserver { _, evento ->
++            when (evento) {
++                Lifecycle.Event.ON_STOP -> viewModel.pausar()
++                Lifecycle.Event.ON_START -> viewModel.retomar()
++                else -> Unit
++            }
++        }
++        lifecycleOwner.lifecycle.addObserver(observer)
++        onDispose {
++            lifecycleOwner.lifecycle.removeObserver(observer)
++            viewModel.liberar()
++        }
++    }
++
++    if (carregando) {
++        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
++        return
++    }
++
++    val canalAtual = viewModel.canalAtual
++    val programaDoCanalAtual by produceState<Programa?>(initialValue = null, canalAtual) {
++        value = canalAtual?.let { viewModel.programaAtual(it) }
++    }
++
++    // Passo 1 (T10): celular deitado = so video + OSD em tela cheia. LocalConfiguration.current
++    // ja recompoe sozinho quando a orientacao muda (sem precisar de DisposableEffect/listener
++    // proprio); como o manifest ja declara configChanges="orientation|screenSize|screenLayout"
++    // (T6), a Activity nao recria e o PlayerView/ExoPlayer nao sao recriados por isso.
++    val emPaisagem = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
++
++    Box(Modifier.fillMaxSize()) {
++        Column(Modifier.fillMaxSize()) {
++            if (!emPaisagem) {
++                TextButton(onClick = onVoltar) { Text("Voltar") }
++            }
++
++            Box(
++                (if (emPaisagem) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(220.dp))
++                    .clickable(onClick = { aoTocarNaTela() }),
++            ) {
++                AndroidView(
++                    factory = { context -> PlayerView(context).apply { player = viewModel.exoPlayer } },
++                    modifier = Modifier.fillMaxSize(),
++                )
++
++                // Global Constraint: so mostra erro (e o botao manual) quando a qualidade mais
++                // baixa tambem falhou -- nunca tenta de novo sozinho sem esse toque.
++                if (viewModel.eventoAtual == EventoCascata.FalhaTerminal) {
++                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
++                            Text(
++                                "Nao foi possivel tocar o canal, nem na qualidade mais baixa.",
++                                color = MaterialTheme.colorScheme.onError,
++                            )
++                            Button(onClick = { viewModel.tentarNovamente() }) { Text("Tentar de novo") }
++                        }
++                    }
++                }
++
++                Osd(
++                    visivel = osdVisivel,
++                    canal = canalAtual,
++                    programaAtual = programaDoCanalAtual,
++                    eventoAtual = viewModel.eventoAtual,
++                    aoTocarNaTela = { aoTocarNaTela() },
++                    onVoltar = onVoltar,
++                    onEscolherQualidade = { viewModel.trocarQualidadeManual(it) },
++                    onCanalAnterior = { viewModel.canalAnterior() },
++                    onCanalProximo = { viewModel.canalProximo() },
++                    onAbrirProgramacao = { grade = true },
++                    onGerenciarContas = onGerenciarContas,
++                    onAbrirConfiguracoes = onAbrirConfiguracoes,
++                )
++            }
++
++            // Paisagem (Passo 1, T10): sem Voltar/abas por fora -- o Osd ja tem seu proprio
++            // "voltar", e a grade de programacao (overlay abaixo) nao depende de aba nenhuma.
++            if (!emPaisagem) {
++                TabRow(selectedTabIndex = aba.ordinal) {
++                    Tab(selected = aba == AbaAoVivo.CANAIS, onClick = { aba = AbaAoVivo.CANAIS }, text = { Text("Canais") })
++                    Tab(
++                        selected = aba == AbaAoVivo.PROGRAMACAO,
++                        onClick = { aba = AbaAoVivo.PROGRAMACAO },
++                        text = { Text("Programacao") },
++                    )
++                }
++
++                Box(Modifier.weight(1f).fillMaxWidth()) {
++                    when (aba) {
++                        AbaAoVivo.CANAIS -> CanaisAba(viewModel, onSelecionarCanal = { viewModel.selecionarCanal(it) })
++                        AbaAoVivo.PROGRAMACAO -> ProgramacaoAba(viewModel)
++                    }
++                }
++            }
++        }
++
++        // Grade de programacao como overlay em tela cheia (atalho do OSD, brief T9) -- reusa
++        // a ProgramacaoAba (T8) por cima de tudo, sem sair da tela de TV ao vivo. Independe de
++        // orientacao (Passo 1, T10): e overlay de tela cheia nos dois casos.
++        if (grade) {
++            Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
++                TextButton(onClick = { grade = false }) { Text("Fechar") }
++                ProgramacaoAba(viewModel)
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+new file mode 100644
+index 0000000..f2c804f
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+@@ -0,0 +1,246 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.media3.exoplayer.ExoPlayer
++import io.github.pagmovel.iptvplayer.AppIptv
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.aovivo.CascataQualidade
++import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
++import io.github.pagmovel.iptvplayer.aovivo.PlayerAoVivo
++import io.github.pagmovel.iptvplayer.aovivo.Qualidade
++import io.github.pagmovel.iptvplayer.aovivo.agruparPorQualidade
++import io.github.pagmovel.iptvplayer.dados.CanalFavorito
++import io.github.pagmovel.iptvplayer.dados.Categoria
++import io.github.pagmovel.iptvplayer.dados.Programa
++import io.github.pagmovel.iptvplayer.dados.TipoConteudo
++import java.util.Calendar
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.launch
++
++/** Programas de ate 24h atras ate agora -- janela ampla o suficiente pra conter o que esta
++ * no ar, sem depender de um horario fixo de inicio de dia. */
++private const val JANELA_PROGRAMACAO_MS = 24 * 60 * 60 * 1000L
++
++/** Entre os programas retornados por [CatalogoDao.programacao], o que esta no ar agora --
++ * comeca antes (ou agora) e ainda nao terminou. */
++fun programaNoInstante(programas: List<Programa>, agora: Long): Programa? =
++    programas.lastOrNull { it.inicio <= agora && it.fim > agora }
++
++/** Filtro aplicado a lista de canais agrupados: por categoria (null = Todos) e/ou so favoritos. */
++fun filtrarCanais(
++    canais: List<CanalAgrupado>,
++    favoritos: List<CanalFavorito>,
++    categoriaId: Long?,
++    somenteFavoritos: Boolean,
++): List<CanalAgrupado> {
++    val chavesFavoritas = favoritos.map { it.nomeBase to it.categoriaId }.toSet()
++    return canais.filter { canal ->
++        (categoriaId == null || canal.categoriaId == categoriaId) &&
++            (!somenteFavoritos || (canal.nomeBase to canal.categoriaId) in chavesFavoritas)
++    }
++}
++
++/** Vizinho de [atual] em [canais] a [delta] posicoes (-1 anterior, +1 proximo) -- null se a
++ * lista estiver vazia, [atual] for null, [atual] nao estiver na lista (filtro mudou debaixo
++ * do pe), ou o vizinho cair fora dos limites. Nao vira de ponta a ponta (decisao da T9, ver
++ * design Sec. "TV ao vivo": dar a volta sem nenhum sinal visual seria surpreendente). */
++fun canalVizinho(canais: List<CanalAgrupado>, atual: CanalAgrupado?, delta: Int): CanalAgrupado? {
++    if (atual == null) return null
++    val indice = canais.indexOfFirst { it.nomeBase == atual.nomeBase && it.categoriaId == atual.categoriaId }
++    if (indice == -1) return null
++    return canais.getOrNull(indice + delta)
++}
++
++/** Dia da programacao mostrado na aba Programacao -- "Ontem" so serve para consulta (design
++ * Sec. "TV ao vivo"). */
++enum class DiaPrograma { ONTEM, HOJE, AMANHA }
++
++/** Janela [inicio, fim) em epoch ms do dia indicado por [dia], no fuso do aparelho, a partir
++ * do instante [agora]. HOJE cobre 00:00:00.000 (inclusive) ate 00:00:00.000 do dia seguinte
++ * (exclusivo); ONTEM/AMANHA deslocam essa janela em -1/+1 dia. Usa Calendar (nao java.time)
++ * pra ficar consistente com o estilo ja usado no projeto (ver formatarData em ResumoTela.kt). */
++fun janelaDoDia(dia: DiaPrograma, agora: Long = System.currentTimeMillis()): Pair<Long, Long> {
++    val calendario = Calendar.getInstance()
++    calendario.timeInMillis = agora
++    calendario.set(Calendar.HOUR_OF_DAY, 0)
++    calendario.set(Calendar.MINUTE, 0)
++    calendario.set(Calendar.SECOND, 0)
++    calendario.set(Calendar.MILLISECOND, 0)
++    when (dia) {
++        DiaPrograma.ONTEM -> calendario.add(Calendar.DAY_OF_MONTH, -1)
++        DiaPrograma.HOJE -> Unit
++        DiaPrograma.AMANHA -> calendario.add(Calendar.DAY_OF_MONTH, 1)
++    }
++    val inicio = calendario.timeInMillis
++    calendario.add(Calendar.DAY_OF_MONTH, 1)
++    return inicio to calendario.timeInMillis
++}
++
++/**
++ * Estado e acoes da tela de TV ao vivo -- mesma observacao de
++ * [io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel] sobre nao ser um
++ * `androidx.lifecycle.ViewModel`.
++ *
++ * [carregar] resolve a conta ativa e monta o [PlayerAoVivo] -- so precisa ser chamado uma vez
++ * (a conta ativa nao muda durante a sessao da tela); so depois dele os `Flow`s de categorias/
++ * favoritos/canais ficam disponiveis (ver [AoVivoTela]).
++ */
++class AoVivoViewModel(private val app: AppIptv) {
++    private val banco get() = app.banco
++
++    private var contaId: Long = 0L
++    private lateinit var playerAoVivo: PlayerAoVivo
++
++    private val filtroCategoria = MutableStateFlow<Long?>(null)
++    private val filtroSomenteFavoritos = MutableStateFlow(false)
++
++    // Mesmo dispatcher do escopo interno de PlayerAoVivo (Dispatchers.Main.immediate): a
++    // inscricao em cascata.eventos precisa estar ativa ANTES de selecionarCanal chamar
++    // playerAoVivo.abrir(), que chama cascata.iniciar() -- eventos e um SharedFlow sem
++    // replay, perderia o primeiro Tocando senao (mesmo achado real documentado em
++    // PlayerAoVivo.kt).
++    private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++    private var cascataAtual: CascataQualidade? = null
++    private var jobEventos: Job? = null
++
++    var eventoAtual by mutableStateOf<EventoCascata?>(null)
++        private set
++
++    /** Canal selecionado agora -- publico desde a T9: o OSD mostra nome do canal e as
++     * variantes de qualidade, e [canalAnterior]/[canalProximo] precisam dele pra achar a
++     * posicao na lista filtrada atual. */
++    var canalAtual: CanalAgrupado? by mutableStateOf(null)
++        private set
++
++    val exoPlayer: ExoPlayer get() = playerAoVivo.exoPlayer
++
++    lateinit var categorias: Flow<List<Categoria>>
++        private set
++    lateinit var favoritos: Flow<List<CanalFavorito>>
++        private set
++    lateinit var canaisFiltrados: Flow<List<CanalAgrupado>>
++        private set
++
++    suspend fun carregar() {
++        val conta = requireNotNull(banco.contaDao().ativa()) { "sem conta ativa" }
++        contaId = conta.id
++        val cred = app.contasRepositorio.credenciais(conta)
++        val api = app.criarApi(cred)
++        playerAoVivo = PlayerAoVivo(app) { streamId -> api.urlAoVivo(streamId) }
++
++        categorias = banco.catalogoDao().categorias(contaId, TipoConteudo.AO_VIVO)
++        favoritos = banco.catalogoDao().favoritos(contaId)
++        val canaisAgrupados = banco.catalogoDao().canais(contaId).map { agruparPorQualidade(it) }
++        canaisFiltrados = combine(
++            canaisAgrupados,
++            favoritos,
++            filtroCategoria,
++            filtroSomenteFavoritos,
++        ) { canais, favs, categoriaId, somenteFav -> filtrarCanais(canais, favs, categoriaId, somenteFav) }
++    }
++
++    /** Programa no ar agora no canal, ou null se nao tem EPG ou a janela nao tem nada no ar. */
++    suspend fun programaAtual(canal: CanalAgrupado): Programa? {
++        val epgId = canal.epgId ?: return null
++        val agora = System.currentTimeMillis()
++        val programas = banco.catalogoDao().programacao(contaId, epgId, agora - JANELA_PROGRAMACAO_MS, agora + 1)
++        return programaNoInstante(programas, agora)
++    }
++
++    /** Programacao do dia inteiro do canal atualmente selecionado (aba Programacao, design
++     * Sec. "TV ao vivo") -- lista vazia sem canal selecionado ou sem epgId, nunca trava. */
++    suspend fun programacaoDoDia(dia: DiaPrograma): List<Programa> {
++        val epgId = canalAtual?.epgId ?: return emptyList()
++        val (inicio, fim) = janelaDoDia(dia)
++        return banco.catalogoDao().programacao(contaId, epgId, inicio, fim)
++    }
++
++    fun filtrarPorCategoria(categoriaId: Long?) {
++        filtroCategoria.value = categoriaId
++    }
++
++    fun filtrarFavoritos(somente: Boolean) {
++        filtroSomenteFavoritos.value = somente
++    }
++
++    suspend fun favoritar(canal: CanalAgrupado) {
++        banco.catalogoDao().favoritar(
++            CanalFavorito(contaId, canal.nomeBase, canal.categoriaId, System.currentTimeMillis()),
++        )
++    }
++
++    suspend fun desfavoritar(canal: CanalAgrupado) {
++        banco.catalogoDao().desfavoritar(contaId, canal.nomeBase, canal.categoriaId)
++    }
++
++    /** Cria uma cascata nova pro canal e abre no player, cancelando a cascata anterior.
++     * Le [ConfiguracoesRepositorio.tempoBufferMs] a cada chamada -- uma troca feita em
++     * Configuracoes so vale a partir do proximo canal aberto. */
++    fun selecionarCanal(canal: CanalAgrupado) {
++        if (!::playerAoVivo.isInitialized) return
++        jobEventos?.cancel()
++        canalAtual = canal
++        eventoAtual = null
++
++        val cascata = CascataQualidade(canal, app.configuracoes.tempoBufferMs(), escopo)
++        cascataAtual = cascata
++        jobEventos = escopo.launch {
++            cascata.eventos.collect { evento -> eventoAtual = evento }
++        }
++        playerAoVivo.abrir(canal, cascata)
++    }
++
++    fun tentarNovamente() {
++        cascataAtual?.tentarNovamente()
++    }
++
++    /** Troca de qualidade manual do OSD (T9) -- delega pra
++     * [CascataQualidade.escolherManualmente], que troca o que esta tocando na hora e deixa a
++     * automatica livre pra continuar degradando a partir daqui se essa escolha tambem falhar. */
++    fun trocarQualidadeManual(qualidade: Qualidade) {
++        cascataAtual?.escolherManualmente(qualidade)
++    }
++
++    /** Canal anterior/proximo do OSD (T9, design Sec. "TV ao vivo"): navega dentro da lista
++     * filtrada ATIVA no momento ([canaisFiltrados]), nao a lista completa sem filtro. Sem
++     * efeito se nao houver vizinho (ver [canalVizinho]). */
++    fun canalAnterior() {
++        escopo.launch {
++            canalVizinho(canaisFiltrados.first(), canalAtual, -1)?.let { selecionarCanal(it) }
++        }
++    }
++
++    fun canalProximo() {
++        escopo.launch {
++            canalVizinho(canaisFiltrados.first(), canalAtual, 1)?.let { selecionarCanal(it) }
++        }
++    }
++
++    /** ON_STOP (Global Constraint): pausa sem liberar o player. */
++    fun pausar() {
++        if (::playerAoVivo.isInitialized) playerAoVivo.exoPlayer.pause()
++    }
++
++    /** ON_START: reabre o canal atual do zero -- e transmissao ao vivo, nao ha posicao pra retomar. */
++    fun retomar() {
++        canalAtual?.let { selecionarCanal(it) }
++    }
++
++    /** ON_DISPOSE: libera o ExoPlayer de verdade e cancela a coleta de eventos da tela. */
++    fun liberar() {
++        jobEventos?.cancel()
++        if (::playerAoVivo.isInitialized) playerAoVivo.liberar()
++        escopo.cancel()
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt
+new file mode 100644
+index 0000000..6e647b7
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/CanaisAba.kt
+@@ -0,0 +1,152 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.produceState
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.dados.Programa
++import kotlinx.coroutines.launch
++
++/**
++ * Aba "Canais" da tela de TV ao vivo (brief T7, design Sec. "TV ao vivo"): chips de categoria
++ * (Todos / Favoritos / categorias reais, selecao unica) e a lista de canais agrupados por
++ * qualidade -- cada linha com estrela de favorito e o programa que esta no ar agora (ou
++ * "Sem programacao").
++ */
++@Composable
++fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> Unit) {
++    val categorias by viewModel.categorias.collectAsState(initial = emptyList())
++    val favoritos by viewModel.favoritos.collectAsState(initial = emptyList())
++    val canais by viewModel.canaisFiltrados.collectAsState(initial = emptyList())
++    val chavesFavoritas = remember(favoritos) { favoritos.map { it.nomeBase to it.categoriaId }.toSet() }
++    val escopo = rememberCoroutineScope()
++
++    var categoriaSelecionada by remember { mutableStateOf<Long?>(null) }
++    var somenteFavoritos by remember { mutableStateOf(false) }
++
++    Column(Modifier.fillMaxSize()) {
++        LazyRow(
++            Modifier.fillMaxWidth().padding(8.dp),
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            item {
++                FilterChip(
++                    selected = categoriaSelecionada == null && !somenteFavoritos,
++                    onClick = {
++                        categoriaSelecionada = null
++                        somenteFavoritos = false
++                        viewModel.filtrarPorCategoria(null)
++                        viewModel.filtrarFavoritos(false)
++                    },
++                    label = { Text("Todos") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = somenteFavoritos,
++                    onClick = {
++                        categoriaSelecionada = null
++                        somenteFavoritos = true
++                        viewModel.filtrarPorCategoria(null)
++                        viewModel.filtrarFavoritos(true)
++                    },
++                    label = { Text("Favoritos") },
++                )
++            }
++            items(categorias, key = { it.categoriaId }) { categoria ->
++                FilterChip(
++                    selected = !somenteFavoritos && categoriaSelecionada == categoria.categoriaId,
++                    onClick = {
++                        categoriaSelecionada = categoria.categoriaId
++                        somenteFavoritos = false
++                        viewModel.filtrarPorCategoria(categoria.categoriaId)
++                        viewModel.filtrarFavoritos(false)
++                    },
++                    label = { Text(categoria.nome) },
++                )
++            }
++        }
++
++        if (canais.isEmpty()) {
++            Text("Nenhum canal nesse filtro.", Modifier.padding(16.dp))
++        }
++
++        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
++            items(canais, key = { it.nomeBase + "|" + it.categoriaId }) { canal ->
++                val favorito = (canal.nomeBase to canal.categoriaId) in chavesFavoritas
++                LinhaCanal(
++                    canal = canal,
++                    favorito = favorito,
++                    carregarPrograma = { viewModel.programaAtual(canal) },
++                    onClick = { onSelecionarCanal(canal) },
++                    onAlternarFavorito = {
++                        escopo.launch {
++                            if (favorito) viewModel.desfavoritar(canal) else viewModel.favoritar(canal)
++                        }
++                    },
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun LinhaCanal(
++    canal: CanalAgrupado,
++    favorito: Boolean,
++    carregarPrograma: suspend () -> Programa?,
++    onClick: () -> Unit,
++    onAlternarFavorito: () -> Unit,
++) {
++    val programa by produceState<Programa?>(initialValue = null, canal) { value = carregarPrograma() }
++
++    ListItem(
++        headlineContent = { Text(canal.nomeBase) },
++        supportingContent = { Text(programa?.titulo ?: "Sem programacao") },
++        leadingContent = { IconeOuNome(canal.nomeBase) },
++        trailingContent = {
++            TextButton(onClick = onAlternarFavorito) { Text(if (favorito) "★" else "☆") }
++        },
++        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
++    )
++}
++
++/**
++ * ponytail: sem lib de imagem (Coil/Glide) no projeto ainda -- mostra sempre o nome sobre
++ * fundo neutro, mesma regra do design Sec. 4 pra item sem capa. Trocar por um
++ * AsyncImage(canal.icone) quando uma lib de imagem entrar no projeto (T7 nao precisou).
++ */
++@Composable
++private fun IconeOuNome(nome: String) {
++    Box(
++        Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceVariant),
++        contentAlignment = Alignment.Center,
++    ) {
++        Text(nome.take(2).uppercase(), style = MaterialTheme.typography.labelSmall)
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/Osd.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/Osd.kt
+new file mode 100644
+index 0000000..882dc0e
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/Osd.kt
+@@ -0,0 +1,140 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.unit.dp
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.aovivo.EventoCascata
++import io.github.pagmovel.iptvplayer.aovivo.Qualidade
++import io.github.pagmovel.iptvplayer.dados.Programa
++import kotlinx.coroutines.delay
++
++/** Quanto tempo o selo de "Mudou para X" fica na tela antes de sumir sozinho -- decisao
++ * minha (T9), o design nao fixa um valor (so fixa o timer de 8s da cascata, que e outra
++ * coisa: o tempo de buffer ate degradar, nao o tempo que o aviso fica visivel). */
++private const val SELO_DURACAO_MS = 3_000L
++
++/**
++ * OSD (overlay) do player de TV ao vivo -- brief T9, design Sec. "TV ao vivo" > "Controles do
++ * player (OSD)". [AoVivoTela] controla [visivel] (toque na tela mostra e reinicia o timer de
++ * auto-esconder via [aoTocarNaTela]); aqui dentro, cada acao tambem chama [aoTocarNaTela] ao
++ * ser tocada, pra nao sumir no meio de uma interacao.
++ *
++ * O selo de troca de qualidade ("Mudou para X") e independente de [visivel]: a troca
++ * automatica pode acontecer sem nenhum toque na tela (ex. usuario so assistindo), e o aviso
++ * precisa aparecer mesmo com o resto do OSD escondido.
++ */
++@Composable
++fun Osd(
++    visivel: Boolean,
++    canal: CanalAgrupado?,
++    programaAtual: Programa?,
++    eventoAtual: EventoCascata?,
++    aoTocarNaTela: () -> Unit,
++    onVoltar: () -> Unit,
++    onEscolherQualidade: (Qualidade) -> Unit,
++    onCanalAnterior: () -> Unit,
++    onCanalProximo: () -> Unit,
++    onAbrirProgramacao: () -> Unit,
++    onGerenciarContas: () -> Unit,
++    onAbrirConfiguracoes: () -> Unit,
++) {
++    var seloEvento by remember { mutableStateOf<EventoCascata.Trocou?>(null) }
++    LaunchedEffect(eventoAtual) {
++        // Achado real da revisao: LaunchedEffect(eventoAtual) cancela esta corrotina assim
++        // que eventoAtual muda de novo -- sem o `else`, um Trocou seguido (antes do delay
++        // terminar) por null/Tocando/FalhaTerminal deixava seloEvento preso no Trocou antigo
++        // pra sempre (ex. trocar de canal com o selo de qualidade ainda visivel).
++        if (eventoAtual is EventoCascata.Trocou) {
++            seloEvento = eventoAtual
++            delay(SELO_DURACAO_MS)
++            seloEvento = null
++        } else {
++            seloEvento = null
++        }
++    }
++
++    Box(Modifier.fillMaxSize()) {
++        if (visivel) {
++            // Qualidade tocando agora, pra destacar no seletor -- deriva de eventoAtual em vez
++            // de precisar de outro campo no ViewModel (Tocando/Trocou sempre carregam a
++            // variante/qualidade corrente; FalhaTerminal e null nao tem uma pra destacar).
++            val qualidadeAtual = when (eventoAtual) {
++                is EventoCascata.Tocando -> eventoAtual.variante.qualidade
++                is EventoCascata.Trocou -> eventoAtual.para
++                else -> null
++            }
++            fun comToque(acao: () -> Unit): () -> Unit = { aoTocarNaTela(); acao() }
++
++            Column(
++                Modifier
++                    .fillMaxSize()
++                    .background(Color.Black.copy(alpha = 0.6f))
++                    .clickable(onClick = aoTocarNaTela)
++                    .padding(8.dp),
++            ) {
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    TextButton(onClick = comToque(onVoltar)) { Text("Voltar", color = Color.White) }
++                    Column(Modifier.padding(start = 8.dp)) {
++                        Text(canal?.nomeBase ?: "", color = Color.White, style = MaterialTheme.typography.titleSmall)
++                        Text(
++                            programaAtual?.titulo ?: "Sem programacao",
++                            color = Color.White,
++                            style = MaterialTheme.typography.bodySmall,
++                        )
++                    }
++                }
++                Row(Modifier.padding(top = 4.dp)) {
++                    canal?.variantes?.forEach { variante ->
++                        TextButton(onClick = comToque { onEscolherQualidade(variante.qualidade) }) {
++                            Text(
++                                variante.qualidade.rotulo,
++                                color = if (variante.qualidade == qualidadeAtual) Color.Yellow else Color.White,
++                            )
++                        }
++                    }
++                }
++                Row(Modifier.padding(top = 4.dp)) {
++                    TextButton(onClick = comToque(onCanalAnterior)) { Text("< Canal", color = Color.White) }
++                    TextButton(onClick = comToque(onAbrirProgramacao)) { Text("Programacao", color = Color.White) }
++                    TextButton(onClick = comToque(onCanalProximo)) { Text("Canal >", color = Color.White) }
++                }
++                Row(Modifier.padding(top = 4.dp)) {
++                    TextButton(onClick = comToque(onGerenciarContas)) { Text("Gerenciar contas", color = Color.White) }
++                    TextButton(onClick = comToque(onAbrirConfiguracoes)) { Text("Configuracoes", color = Color.White) }
++                }
++            }
++        }
++
++        val evento = seloEvento
++        if (evento != null) {
++            Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.TopCenter) {
++                Text(
++                    "Mudou para ${evento.para.rotulo}",
++                    color = Color.White,
++                    modifier = Modifier
++                        .background(Color.Black.copy(alpha = 0.7f))
++                        .padding(horizontal = 8.dp, vertical = 4.dp),
++                )
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt
+new file mode 100644
+index 0000000..a5fad61
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/ProgramacaoAba.kt
+@@ -0,0 +1,85 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.produceState
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import io.github.pagmovel.iptvplayer.dados.Programa
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++
++/**
++ * Aba "Programacao" da tela de TV ao vivo (brief T8, design Sec. "TV ao vivo"): seletor
++ * Ontem/Hoje/Amanha e a programacao do dia inteiro do canal atualmente selecionado --
++ * "Sem programacao" tanto por canal sem EPG quanto por janela sem nenhum programa.
++ */
++@Composable
++fun ProgramacaoAba(viewModel: AoVivoViewModel) {
++    var dia by remember { mutableStateOf(DiaPrograma.HOJE) }
++    val programas by produceState(initialValue = emptyList<Programa>(), dia) {
++        value = viewModel.programacaoDoDia(dia)
++    }
++
++    Column(Modifier.fillMaxSize()) {
++        LazyRow(
++            Modifier.fillMaxWidth().padding(8.dp),
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.ONTEM,
++                    onClick = { dia = DiaPrograma.ONTEM },
++                    label = { Text("Ontem") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.HOJE,
++                    onClick = { dia = DiaPrograma.HOJE },
++                    label = { Text("Hoje") },
++                )
++            }
++            item {
++                FilterChip(
++                    selected = dia == DiaPrograma.AMANHA,
++                    onClick = { dia = DiaPrograma.AMANHA },
++                    label = { Text("Amanha") },
++                )
++            }
++        }
++
++        if (programas.isEmpty()) {
++            Text("Sem programacao.", Modifier.padding(16.dp))
++        }
++
++        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
++            items(programas, key = { it.inicio }) { programa ->
++                ListItem(
++                    headlineContent = { Text(programa.titulo) },
++                    supportingContent = { Text(formatarHorario(programa.inicio, programa.fim)) },
++                )
++            }
++        }
++    }
++}
++
++private fun formatarHorario(inicioMs: Long, fimMs: Long): String {
++    val formato = SimpleDateFormat("HH:mm", Locale("pt", "BR"))
++    return "${formato.format(Date(inicioMs))} - ${formato.format(Date(fimMs))}"
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesTela.kt
+new file mode 100644
+index 0000000..aac30f2
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesTela.kt
+@@ -0,0 +1,59 @@
++package io.github.pagmovel.iptvplayer.ui.configuracoes
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.text.KeyboardOptions
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.input.KeyboardType
++import androidx.compose.ui.unit.dp
++
++/**
++ * Tela de Configurações (brief T10, design Sec. "TV ao vivo" > "Configurações") — único campo
++ * por enquanto: tempo de buffer/erro antes da troca automática de qualidade (T4/T5). Acessível
++ * pelo atalho do OSD (T9, [io.github.pagmovel.iptvplayer.ui.aovivo.Osd]) e pela tela de Resumo
++ * (onde "Gerenciar contas" já estava, Plano 1).
++ */
++@Composable
++fun ConfiguracoesTela(viewModel: ConfiguracoesViewModel, onVoltar: () -> Unit) {
++    var tempoBufferTexto by remember { mutableStateOf("") }
++    var salvo by remember { mutableStateOf(false) }
++
++    LaunchedEffect(viewModel) {
++        tempoBufferTexto = viewModel.tempoBufferSegundos().toString()
++    }
++
++    Column(Modifier.fillMaxSize().padding(16.dp)) {
++        TextButton(onClick = onVoltar) { Text("Voltar") }
++        Spacer(Modifier.height(8.dp))
++        Text("Configurações", style = MaterialTheme.typography.headlineSmall)
++        Spacer(Modifier.height(16.dp))
++        OutlinedTextField(
++            value = tempoBufferTexto,
++            onValueChange = { tempoBufferTexto = it; salvo = false },
++            label = { Text("Tempo de buffer antes de trocar de qualidade (segundos)") },
++            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
++        )
++        Spacer(Modifier.height(8.dp))
++        TextButton(onClick = {
++            val segundos = tempoBufferTexto.toIntOrNull()
++            if (segundos != null && segundos > 0) {
++                viewModel.definirTempoBufferSegundos(segundos)
++                salvo = true
++            }
++        }) { Text("Salvar") }
++        if (salvo) Text("Salvo.")
++    }
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModel.kt
+new file mode 100644
+index 0000000..8be1cb8
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModel.kt
+@@ -0,0 +1,15 @@
++package io.github.pagmovel.iptvplayer.ui.configuracoes
++
++import io.github.pagmovel.iptvplayer.configuracoes.ConfiguracoesRepositorio
++
++/**
++ * Estado e ações da tela de Configurações (brief T10) — mesma observação de
++ * [io.github.pagmovel.iptvplayer.ui.contas.ContasViewModel] sobre não ser um
++ * `androidx.lifecycle.ViewModel`. Único campo por enquanto: tempo de buffer (em segundos)
++ * antes da troca automática de qualidade (T4/T5).
++ */
++class ConfiguracoesViewModel(private val repositorio: ConfiguracoesRepositorio) {
++    fun tempoBufferSegundos(): Int = (repositorio.tempoBufferMs() / 1000L).toInt()
++
++    fun definirTempoBufferSegundos(segundos: Int) = repositorio.definirTempoBufferSegundos(segundos)
++}
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+index b64947a..671e28a 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/resumo/ResumoTela.kt
+@@ -26,21 +26,27 @@ import io.github.pagmovel.iptvplayer.dados.Conta
+ import io.github.pagmovel.iptvplayer.dados.Contagem
+ import java.text.SimpleDateFormat
+ import java.util.Date
+ import java.util.Locale
+ 
+ /**
+  * Tela de resumo (brief T11) — tela inicial provisória, que o Plano 3 troca pela vitrine.
+  * Sem conta ativa, [onPrecisaDeConta] leva direto para o formulário de cadastro.
+  */
+ @Composable
+-fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGerenciarContas: () -> Unit) {
++fun ResumoTela(
++    viewModel: ResumoViewModel,
++    onPrecisaDeConta: () -> Unit,
++    onGerenciarContas: () -> Unit,
++    onAssistirAoVivo: () -> Unit,
++    onAbrirConfiguracoes: () -> Unit,
++) {
+     var conta by remember { mutableStateOf<Conta?>(null) }
+     var contagem by remember { mutableStateOf(Contagem(0, 0, 0, 0)) }
+     var carregando by remember { mutableStateOf(true) }
+ 
+     LaunchedEffect(Unit) {
+         val ativa = viewModel.contaAtiva()
+         if (ativa == null) {
+             onPrecisaDeConta()
+             return@LaunchedEffect
+         }
+@@ -75,20 +81,22 @@ fun ResumoTela(viewModel: ResumoViewModel, onPrecisaDeConta: () -> Unit, onGeren
+         Text("Séries: ${contagem.series}")
+         Text("Programas: ${contagem.programas}")
+         Spacer(Modifier.height(16.dp))
+         EstadoCarga(info)
+         Spacer(Modifier.height(8.dp))
+         Text("Última carga: " + formatarData(contaAtual.ultimaCargaEm))
+         Spacer(Modifier.height(16.dp))
+         Button(onClick = { viewModel.atualizarAgora(contaAtual.id) }) { Text("Atualizar agora") }
+         Spacer(Modifier.height(8.dp))
+         TextButton(onClick = onGerenciarContas) { Text("Gerenciar contas") }
++        TextButton(onClick = onAssistirAoVivo) { Text("Assistir ao vivo") }
++        TextButton(onClick = onAbrirConfiguracoes) { Text("Configurações") }
+     }
+ }
+ 
+ @Composable
+ private fun EstadoCarga(info: WorkInfo?) {
+     val texto = when (info?.state) {
+         WorkInfo.State.RUNNING -> "Atualizando: " + nomeEtapa(info.progress.getString("etapa"))
+         WorkInfo.State.ENQUEUED -> "Aguardando conexão com a internet."
+         WorkInfo.State.FAILED -> info.outputData.getString("mensagem") ?: "Falha ao atualizar."
+         else -> null
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt
+new file mode 100644
+index 0000000..8f615a9
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CanalAgrupadoTest.kt
+@@ -0,0 +1,99 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import io.github.pagmovel.iptvplayer.dados.Canal
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class CanalAgrupadoTest {
++
++    @Test
++    fun `agrupa variantes do mesmo canal pelo nome-sem-sufixo e categoria`() {
++        // 3 Canal sintéticos: "CANAL TESTE FHD", "CANAL TESTE HD", "CANAL TESTE SD", mesma categoriaId.
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL TESTE FHD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL TESTE HD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++            Canal(contaId = 1, streamId = 3, nome = "CANAL TESTE SD", categoriaId = 10, icone = "icone.png", epgId = "epg1", numero = 1),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(1, resultado.size)
++        val agrupado = resultado[0]
++        assertEquals("CANAL TESTE", agrupado.nomeBase)
++        assertEquals(10, agrupado.categoriaId)
++        assertEquals("icone.png", agrupado.icone)
++        assertEquals("epg1", agrupado.epgId)
++        assertEquals(1, agrupado.numero)
++        assertEquals(3, agrupado.variantes.size)
++        // variantes ordenadas de maior pra menor: FHD, HD, SD
++        assertEquals(Qualidade.FHD, agrupado.variantes[0].qualidade)
++        assertEquals(1L, agrupado.variantes[0].streamId)
++        assertEquals(Qualidade.HD, agrupado.variantes[1].qualidade)
++        assertEquals(2L, agrupado.variantes[1].streamId)
++        assertEquals(Qualidade.SD, agrupado.variantes[2].qualidade)
++        assertEquals(3L, agrupado.variantes[2].streamId)
++    }
++
++    @Test
++    fun `canais com nome-base igual em categorias diferentes nao se misturam`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL X HD", categoriaId = 1, icone = null, epgId = null, numero = null),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL X HD", categoriaId = 2, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(2, resultado.size)
++        assertEquals("CANAL X", resultado[0].nomeBase)
++        assertEquals(1, resultado[0].categoriaId)
++        assertEquals("CANAL X", resultado[1].nomeBase)
++        assertEquals(2, resultado[1].categoriaId)
++    }
++
++    @Test
++    fun `categoriaId nulo normaliza para -1 sem colidir com categoria real -1`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL Y HD", categoriaId = null, icone = null, epgId = null, numero = null),
++            Canal(contaId = 1, streamId = 2, nome = "CANAL Y HD", categoriaId = -1L, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        // Ambos normalizam pra -1L, então viram 1 CanalAgrupado só
++        assertEquals(1, resultado.size)
++        assertEquals("CANAL Y", resultado[0].nomeBase)
++        assertEquals(-1L, resultado[0].categoriaId)
++        assertEquals(2, resultado[0].variantes.size)
++    }
++
++    @Test
++    fun `canal sem sufixo de qualidade reconhecido vira grupo de 1 variante`() {
++        val canais = listOf(
++            Canal(contaId = 1, streamId = 1, nome = "CANAL SEM SUFIXO", categoriaId = 10, icone = null, epgId = null, numero = null),
++        )
++
++        val resultado = agruparPorQualidade(canais)
++
++        assertEquals(1, resultado.size)
++        val agrupado = resultado[0]
++        assertEquals("CANAL SEM SUFIXO", agrupado.nomeBase)
++        assertEquals(1, agrupado.variantes.size)
++        // Canal sem sufixo reconhecido entra como Qualidade.SD (pior caso)
++        assertEquals(Qualidade.SD, agrupado.variantes[0].qualidade)
++        assertEquals(1L, agrupado.variantes[0].streamId)
++    }
++
++    @Test
++    fun `qualidadeDoNome reconhece os 4 sufixos, case-insensitive`() {
++        assertEquals(Qualidade.SD, qualidadeDoNome("X SD"))
++        assertEquals(Qualidade.SD, qualidadeDoNome("x sd"))
++        assertEquals(Qualidade.HD, qualidadeDoNome("X HD"))
++        assertEquals(Qualidade.HD, qualidadeDoNome("x hd"))
++        assertEquals(Qualidade.FHD, qualidadeDoNome("X FHD"))
++        assertEquals(Qualidade.FHD, qualidadeDoNome("x fhd"))
++        assertEquals(Qualidade.QUATRO_K, qualidadeDoNome("X 4K"))
++        assertEquals(Qualidade.QUATRO_K, qualidadeDoNome("x 4k"))
++        // Sem sufixo reconhecido
++        assertEquals(null, qualidadeDoNome("X SEM SUFIXO"))
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+new file mode 100644
+index 0000000..8593ff2
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+@@ -0,0 +1,229 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import kotlinx.coroutines.flow.toList
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++private const val TEMPO_BUFFER_MS = 8_000L
++
++private fun canalCom(vararg qualidades: Qualidade): CanalAgrupado {
++    val variantes = qualidades.mapIndexed { indice, qualidade ->
++        VarianteQualidade(qualidade, streamId = (indice + 1).toLong())
++    }
++    return CanalAgrupado(
++        nomeBase = "CANAL TESTE",
++        categoriaId = 1,
++        icone = null,
++        epgId = null,
++        numero = null,
++        variantes = variantes,
++    )
++}
++
++class CascataQualidadeTest {
++
++    /** Coleta os eventos num coroutine de fundo com dispatcher nao-confinado, pra o collector
++     * ja estar inscrito (suspenso aguardando) antes de qualquer emissao do teste -- sem isso
++     * o tryEmit do SharedFlow nao tem pra quem entregar o evento e ele se perde. */
++    private fun TestScope.coletar(cascata: CascataQualidade): MutableList<EventoCascata> {
++        val eventos = mutableListOf<EventoCascata>()
++        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
++            cascata.eventos.toList(eventos)
++        }
++        return eventos
++    }
++
++    @Test
++    fun `inicia sempre na maior qualidade disponivel`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++
++        assertEquals(listOf(EventoCascata.Tocando(canal.variantes[0])), eventos)
++    }
++
++    @Test
++    fun `trava por mais que o tempo configurado desce uma qualidade e reinicia o timer`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
++
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS / 2)
++
++        // timer reiniciou do zero na segunda chamada: metade do tempo nao basta
++        assertEquals(2, eventos.size)
++    }
++
++    @Test
++    fun `travar por menos que o tempo configurado nao troca`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS - 1)
++        cascata.aoEstabilizar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertTrue(eventos.none { it is EventoCascata.Trocou })
++    }
++
++    @Test
++    fun `erro definitivo troca na hora, sem esperar o timer`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoErroDefinitivo()
++
++        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
++    }
++
++    @Test
++    fun `canal com 1 variante so vai direto pra falha terminal ao travar`() = runTest {
++        val canal = canalCom(Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++        assertTrue(eventos.none { it is EventoCascata.Trocou })
++    }
++
++    @Test
++    fun `se a pior qualidade tambem falhar, emite falha terminal e para`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // FHD -> HD
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // HD -> SD (pior)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // SD tambem falha -> FalhaTerminal
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++        val quantidadeAntes = eventos.size
++
++        // a cascata para: sem tentarNovamente(), nao insiste sozinha
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(quantidadeAntes, eventos.size)
++    }
++
++    @Test
++    fun `escolha manual muda a variante sem desligar a cascata automatica`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.SD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        // prova que a automatica continua agindo a partir da escolha manual: SD era a pior
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++    }
++
++    @Test
++    fun `escolha manual emite Trocou na hora com a variante escolhida`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.SD)
++
++        // sem isso o player (que só reage a `eventos`) nunca trocaria de fato o que está
++        // tocando -- achado real da T9, ver comentário em escolherManualmente
++        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.SD), eventos.last())
++    }
++
++    @Test
++    fun `escolher a qualidade que ja esta tocando nao emite evento`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.FHD)
++
++        assertEquals(listOf(EventoCascata.Tocando(canal.variantes[0])), eventos)
++    }
++
++    @Test
++    fun `tentarNovamente apos falha terminal reinicia da maior qualidade`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.SD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // FalhaTerminal
++
++        cascata.tentarNovamente()
++
++        assertEquals(EventoCascata.Tocando(canal.variantes[0]), eventos.last())
++    }
++
++    @Test
++    fun `escolha manual depois de falha terminal reativa a cascata automatica`() = runTest {
++        val canal = canalCom(Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // HD -> SD
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // SD e a pior -> FalhaTerminal
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++
++        cascata.escolherManualmente(Qualidade.HD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
++        // ficar travada no estado terminal antigo
++        assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt
+new file mode 100644
+index 0000000..37c9e03
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt
+@@ -0,0 +1,36 @@
++package io.github.pagmovel.iptvplayer.configuracoes
++
++import android.content.SharedPreferences
++import org.junit.Before
++import org.junit.Test
++import org.junit.Assert.assertEquals
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++@RunWith(RobolectricTestRunner::class)
++class ConfiguracoesRepositorioTest {
++    private lateinit var prefs: SharedPreferences
++    private lateinit var repo: ConfiguracoesRepositorio
++
++    @Before
++    fun montar() {
++        prefs = RuntimeEnvironment.getApplication().getSharedPreferences("config", 0)
++        prefs.edit().clear().apply()
++        repo = ConfiguracoesRepositorio(prefs)
++    }
++
++    @Test
++    fun `tempoBufferMs comeca em 8000 (8 segundos) por padrao`() {
++        assertEquals(8000L, repo.tempoBufferMs())
++    }
++
++    @Test
++    fun `definirTempoBufferSegundos muda o valor lido depois`() {
++        repo.definirTempoBufferSegundos(5)
++        assertEquals(5000L, repo.tempoBufferMs())
++
++        repo.definirTempoBufferSegundos(10)
++        assertEquals(10000L, repo.tempoBufferMs())
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+index 888d566..04802ec 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+@@ -1,13 +1,14 @@
+ package io.github.pagmovel.iptvplayer.dados
+ 
+ import androidx.room.Room
++import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.test.runTest
+ import org.junit.After
+ import org.junit.Assert.assertEquals
+ import org.junit.Before
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
+ import org.robolectric.RuntimeEnvironment
+ 
+ @RunWith(RobolectricTestRunner::class)
+@@ -39,20 +40,23 @@ class CatalogoDaoTest {
+             contaId = contaId, streamId = streamId, nome = nome, categoriaId = null, capa = null,
+             extensao = null, ano = null, nota = null, adicionadoEm = null,
+         )
+ 
+     private fun serie(seriesId: Long, nome: String, contaId: Long = 1): Serie =
+         Serie(
+             contaId = contaId, seriesId = seriesId, nome = nome, categoriaId = null, capa = null,
+             sinopse = null, ano = null, nota = null, modificadaEm = null,
+         )
+ 
++    private fun programa(contaId: Long, epgId: String, inicio: Long, fim: Long, titulo: String): Programa =
++        Programa(contaId = contaId, epgId = epgId, inicio = inicio, fim = fim, titulo = titulo, descricao = null)
++
+     @Test fun `busca ignora acento e maiusculas`() = runTest {
+         dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(contaId = 1, termo = "sao paulo").map { it.nome })
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "SÃO").map { it.nome })
+     }
+ 
+     @Test fun `busca por prefixo enquanto digita`() = runTest {
+         dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "pau").map { it.nome })
+     }
+@@ -87,11 +91,77 @@ class CatalogoDaoTest {
+ 
+     @Test fun `contagem soma cada tipo`() = runTest {
+         dao.inserirCategorias(listOf(Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes")))
+         dao.inserirCanais(listOf(canal(1, "Globo HD"), canal(2, "SporTV HD")))
+         dao.inserirFilmes(listOf(filme(1, "Filme A")))
+         dao.inserirSeries(listOf(serie(1, "Serie A"), serie(2, "Serie B")))
+         dao.inserirProgramas(listOf(Programa(1, "epg1", 1000L, 2000L, "Jornal", null)))
+ 
+         assertEquals(Contagem(canais = 2, filmes = 1, series = 2, programas = 1), dao.contagem(1))
+     }
++
++    @Test fun `favoritar e desfavoritar um canal agrupado`() = runTest {
++        val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
++
++        dao.favoritar(favorito)
++        assertEquals(listOf(favorito), dao.favoritos(1).first())
++
++        dao.desfavoritar(contaId = 1, nomeBase = "Globo", categoriaId = -1L)
++        assertEquals(emptyList<CanalFavorito>(), dao.favoritos(1).first())
++    }
++
++    @Test fun `categorias filtra por tipo`() = runTest {
++        dao.inserirCategorias(listOf(
++            Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes"),
++            Categoria(1, TipoConteudo.AO_VIVO, 2, "Filmes"),
++            Categoria(1, TipoConteudo.FILME, 3, "Ação"),
++            Categoria(1, TipoConteudo.SERIE, 4, "Drama"),
++        ))
++
++        val aoVivos = dao.categorias(1, TipoConteudo.AO_VIVO).first()
++        assertEquals(2, aoVivos.size)
++        assertEquals(setOf(1L, 2L), aoVivos.map { it.categoriaId }.toSet())
++
++        val filmes = dao.categorias(1, TipoConteudo.FILME).first()
++        assertEquals(1, filmes.size)
++        assertEquals(3L, filmes[0].categoriaId)
++
++        val series = dao.categorias(1, TipoConteudo.SERIE).first()
++        assertEquals(1, series.size)
++        assertEquals(4L, series[0].categoriaId)
++    }
++
++    @Test fun `canais lista todos os canais da conta`() = runTest {
++        dao.inserirCanais(listOf(
++            canal(1, "Globo HD", contaId = 1),
++            canal(2, "SporTV HD", contaId = 1),
++            canal(3, "Warner HD", contaId = 1),
++            canal(4, "Outros", contaId = 2),
++        ))
++
++        val canaisConta1 = dao.canais(1).first()
++        assertEquals(3, canaisConta1.size)
++        assertEquals(setOf(1L, 2L, 3L), canaisConta1.map { it.streamId }.toSet())
++
++        val canaisConta2 = dao.canais(2).first()
++        assertEquals(1, canaisConta2.size)
++        assertEquals(4L, canaisConta2[0].streamId)
++    }
++
++    @Test fun `programacao retorna so os programas dentro da janela, ordenados`() = runTest {
++        dao.inserirProgramas(listOf(
++            programa(1, "epg1", 1000L, 1500L, "Programa A"),
++            programa(1, "epg1", 2000L, 2500L, "Programa B"),
++            programa(1, "epg1", 1500L, 2000L, "Programa C"),
++            programa(1, "epg2", 1000L, 1500L, "Outro EPG"),
++            programa(1, "epg1", 2500L, 3000L, "Programa no limite (inicio == fimMs)"),
++            programa(1, "epg1", 3000L, 3500L, "Programa D (fora da janela)"),
++        ))
++
++        val programas = dao.programacao(1, "epg1", 1000L, 2500L)
++
++        // Janela [1000, 2500): inclui 1000, 1500, 2000, exclui 2500 (inclusive limit)
++        assertEquals(3, programas.size)
++        assertEquals(listOf("Programa A", "Programa C", "Programa B"), programas.map { it.titulo })
++        assertEquals(listOf(1000L, 1500L, 2000L), programas.map { it.inicio })
++    }
+ }
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt
+new file mode 100644
+index 0000000..0fb768a
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/MigracaoBancoTest.kt
+@@ -0,0 +1,99 @@
++package io.github.pagmovel.iptvplayer.dados
++
++import android.database.sqlite.SQLiteDatabase
++import androidx.room.Room
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.runTest
++import org.json.JSONObject
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import java.io.File
++
++/**
++ * Testa a `Migration(1, 2)` real (a mesma registrada em `AppIptv.kt`) contra um banco
++ * recriado a partir do schema exportado em `app/schemas/.../1.json`.
++ *
++ * Não usa `androidx.room.testing.MigrationTestHelper`: ele lê o schema como asset Android via
++ * `InstrumentationRegistry`, e neste projeto (unit test Robolectric, sem androidTest/emulador)
++ * o sourceSet de teste não é mesclado nos assets que o Robolectric enxerga — achado real desta
++ * tarefa (`FileNotFoundException: Cannot find the schema file in the assets folder`, mesmo com
++ * `testOptions.unitTests.isIncludeAndroidResources = true` e `sourceSets.test.assets`; a
++ * propriedade `android_merged_assets` gerada pelo AGP só aponta pro merge do variant de
++ * produção, nunca pro sourceSet `test`). Em vez disso, o teste lê o `1.json` como resource de
++ * teste comum (`sourceSets.test.resources`, ver `app/build.gradle.kts`), recria o schema v1 com
++ * o SQL exato que o Room já gerou naquela versão, e abre com o `Room.databaseBuilder` real
++ * (o mesmo builder de produção, com a mesma `Migration` registrada) para migrar de verdade.
++ */
++@RunWith(RobolectricTestRunner::class)
++class MigracaoBancoTest {
++    private var arquivoBanco: File? = null
++
++    @After
++    fun apagarArquivo() {
++        arquivoBanco?.delete()
++    }
++
++    @Test
++    fun `migracao 1 para 2 cria a tabela CanalFavorito sem apagar dados existentes`() = runTest {
++        val arquivo = File.createTempFile("iptv-migracao-teste", ".db")
++        arquivoBanco = arquivo
++        criarBancoVersao1(arquivo)
++
++        val bancoMigrado = Room.databaseBuilder(RuntimeEnvironment.getApplication(), BancoApp::class.java, arquivo.absolutePath)
++            .addMigrations(BancoApp.MIGRACAO_1_2)
++            .allowMainThreadQueries()
++            .build()
++
++        // A Conta inserida na versão 1 continua lá depois da migração (onUpgrade real, não
++        // fallbackToDestructiveMigration).
++        assertEquals("Conta Teste", bancoMigrado.contaDao().ativa()?.nome)
++
++        // A tabela nova existe e aceita favoritar/consultar — não é só o nome na lista de
++        // entities do @Database, o CREATE TABLE da Migration(1, 2) realmente rodou.
++        val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
++        bancoMigrado.catalogoDao().favoritar(favorito)
++        assertEquals(listOf(favorito), bancoMigrado.catalogoDao().favoritos(1).first())
++
++        bancoMigrado.close()
++    }
++}
++
++/** Recria fielmente o schema v1 (`app/schemas/.../1.json`) com uma Conta de teste já inserida. */
++private fun criarBancoVersao1(arquivo: File) {
++    val textoSchema = Thread.currentThread().contextClassLoader!!
++        .getResourceAsStream("io.github.pagmovel.iptvplayer.dados.BancoApp/1.json")!!
++        .bufferedReader()
++        .readText()
++    val schema = JSONObject(textoSchema).getJSONObject("database")
++
++    val db = SQLiteDatabase.openOrCreateDatabase(arquivo, null)
++
++    val setupQueries = schema.getJSONArray("setupQueries")
++    for (i in 0 until setupQueries.length()) {
++        db.execSQL(setupQueries.getString(i))
++    }
++
++    val entidades = schema.getJSONArray("entities")
++    for (i in 0 until entidades.length()) {
++        val entidade = entidades.getJSONObject(i)
++        val tabela = entidade.getString("tableName")
++        db.execSQL(entidade.getString("createSql").replace("\${TABLE_NAME}", tabela))
++        if (entidade.has("contentSyncTriggers")) {
++            val gatilhos = entidade.getJSONArray("contentSyncTriggers")
++            for (j in 0 until gatilhos.length()) {
++                db.execSQL(gatilhos.getString(j))
++            }
++        }
++    }
++
++    db.execSQL(
++        "INSERT INTO Conta (id, nome, servidor, usuario, senhaCifrada, ativa, ultimaCargaEm) " +
++            "VALUES (1, 'Conta Teste', 'http://servidor', 'usuario', X'00', 1, NULL)",
++    )
++    db.version = 1
++    db.close()
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+new file mode 100644
+index 0000000..3b8122c
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModelTest.kt
+@@ -0,0 +1,150 @@
++package io.github.pagmovel.iptvplayer.ui.aovivo
++
++import io.github.pagmovel.iptvplayer.aovivo.CanalAgrupado
++import io.github.pagmovel.iptvplayer.aovivo.Qualidade
++import io.github.pagmovel.iptvplayer.aovivo.VarianteQualidade
++import io.github.pagmovel.iptvplayer.dados.CanalFavorito
++import io.github.pagmovel.iptvplayer.dados.Programa
++import java.util.Calendar
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++/** So a logica propria da T7 (filtro de canais e escolha do programa no ar) e da T8 (janela
++ * do dia da programacao) -- o resto de [AoVivoViewModel] so repassa chamadas pra DAO/
++ * repositorios/cascata/player, ja cobertos pelos testes deles (T1/T2/T3/T5/T6). */
++class AoVivoViewModelTest {
++
++    private fun canal(nomeBase: String, categoriaId: Long) = CanalAgrupado(
++        nomeBase = nomeBase,
++        categoriaId = categoriaId,
++        icone = null,
++        epgId = null,
++        numero = null,
++        variantes = listOf(VarianteQualidade(Qualidade.SD, 1L)),
++    )
++
++    @Test
++    fun `sem filtro nenhum devolve todos os canais`() {
++        val canais = listOf(canal("A", 1), canal("B", 2))
++        val resultado = filtrarCanais(canais, favoritos = emptyList(), categoriaId = null, somenteFavoritos = false)
++        assertEquals(2, resultado.size)
++    }
++
++    @Test
++    fun `filtro por categoria so devolve canais daquela categoria`() {
++        val canais = listOf(canal("A", 1), canal("B", 2))
++        val resultado = filtrarCanais(canais, favoritos = emptyList(), categoriaId = 2L, somenteFavoritos = false)
++        assertEquals(listOf("B"), resultado.map { it.nomeBase })
++    }
++
++    @Test
++    fun `filtro so favoritos usa nomeBase mais categoriaId como chave`() {
++        val canais = listOf(canal("A", 1), canal("B", 1))
++        val favoritos = listOf(CanalFavorito(contaId = 1, nomeBase = "A", categoriaId = 1, criadoEm = 0))
++        val resultado = filtrarCanais(canais, favoritos, categoriaId = null, somenteFavoritos = true)
++        assertEquals(listOf("A"), resultado.map { it.nomeBase })
++    }
++
++    @Test
++    fun `categoria e favoritos combinam com AND`() {
++        val canais = listOf(canal("A", 1), canal("A", 2))
++        val favoritos = listOf(CanalFavorito(contaId = 1, nomeBase = "A", categoriaId = 1, criadoEm = 0))
++        // Favorito e da categoria 1; filtrar por categoria 2 nao deve trazer nada mesmo com somenteFavoritos=false
++        val resultado = filtrarCanais(canais, favoritos, categoriaId = 2L, somenteFavoritos = true)
++        assertEquals(emptyList<String>(), resultado.map { it.nomeBase })
++    }
++
++    @Test
++    fun `canalVizinho acha o canal seguinte na lista filtrada`() {
++        val canais = listOf(canal("A", 1), canal("B", 1), canal("C", 1))
++        val resultado = canalVizinho(canais, atual = canais[0], delta = 1)
++        assertEquals("B", resultado?.nomeBase)
++    }
++
++    @Test
++    fun `canalVizinho acha o canal anterior na lista filtrada`() {
++        val canais = listOf(canal("A", 1), canal("B", 1), canal("C", 1))
++        val resultado = canalVizinho(canais, atual = canais[2], delta = -1)
++        assertEquals("B", resultado?.nomeBase)
++    }
++
++    @Test
++    fun `canalVizinho nao vira de ponta a ponta`() {
++        val canais = listOf(canal("A", 1), canal("B", 1))
++        assertNull(canalVizinho(canais, atual = canais[0], delta = -1))
++        assertNull(canalVizinho(canais, atual = canais[1], delta = 1))
++    }
++
++    @Test
++    fun `canalVizinho devolve null se o canal atual nao esta na lista filtrada`() {
++        val canais = listOf(canal("A", 1), canal("B", 1))
++        assertNull(canalVizinho(canais, atual = canal("Z", 9), delta = 1))
++    }
++
++    @Test
++    fun `canalVizinho devolve null sem canal atual`() {
++        assertNull(canalVizinho(listOf(canal("A", 1)), atual = null, delta = 1))
++    }
++
++    private fun programa(inicio: Long, fim: Long) =
++        Programa(contaId = 1, epgId = "epg1", inicio = inicio, fim = fim, titulo = "t-$inicio", descricao = null)
++
++    @Test
++    fun `programaNoInstante acha o programa cujo fim ainda nao passou`() {
++        val programas = listOf(programa(0, 100), programa(100, 200), programa(200, 300))
++        val resultado = programaNoInstante(programas, agora = 150)
++        assertEquals("t-100", resultado?.titulo)
++    }
++
++    @Test
++    fun `programaNoInstante devolve null quando o ultimo programa da janela ja terminou`() {
++        val programas = listOf(programa(0, 100), programa(100, 200))
++        val resultado = programaNoInstante(programas, agora = 250)
++        assertNull(resultado)
++    }
++
++    @Test
++    fun `programaNoInstante devolve null para lista vazia`() {
++        assertNull(programaNoInstante(emptyList(), agora = 150))
++    }
++
++    private fun calendarEm(ano: Int, mes: Int, dia: Int, hora: Int, minuto: Int): Long {
++        val calendario = Calendar.getInstance()
++        calendario.set(ano, mes, dia, hora, minuto, 0)
++        calendario.set(Calendar.MILLISECOND, 0)
++        return calendario.timeInMillis
++    }
++
++    @Test
++    fun `janelaDoDia HOJE cobre de 00h00 a 00h00 do dia seguinte`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.HOJE, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia ONTEM desloca a janela um dia pra tras`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.ONTEM, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 11, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia AMANHA desloca a janela um dia pra frente`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 15, 30)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.AMANHA, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 14, 0, 0), fim)
++    }
++
++    @Test
++    fun `janelaDoDia funciona perto da virada do dia (23h59)`() {
++        val agora = calendarEm(2026, Calendar.NOVEMBER, 12, 23, 59)
++        val (inicio, fim) = janelaDoDia(DiaPrograma.HOJE, agora)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 12, 0, 0), inicio)
++        assertEquals(calendarEm(2026, Calendar.NOVEMBER, 13, 0, 0), fim)
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModelTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModelTest.kt
+new file mode 100644
+index 0000000..f3acae2
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/ui/configuracoes/ConfiguracoesViewModelTest.kt
+@@ -0,0 +1,35 @@
++package io.github.pagmovel.iptvplayer.ui.configuracoes
++
++import android.content.SharedPreferences
++import io.github.pagmovel.iptvplayer.configuracoes.ConfiguracoesRepositorio
++import org.junit.Assert.assertEquals
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++/** Teste minimo da conversao ms<->segundos (unica logica nao trivial deste ViewModel --
++ * o resto e so delegar pra [ConfiguracoesRepositorio], ja testado). */
++@RunWith(RobolectricTestRunner::class)
++class ConfiguracoesViewModelTest {
++    private lateinit var viewModel: ConfiguracoesViewModel
++
++    @Before
++    fun montar() {
++        val prefs: SharedPreferences = RuntimeEnvironment.getApplication().getSharedPreferences("config", 0)
++        prefs.edit().clear().apply()
++        viewModel = ConfiguracoesViewModel(ConfiguracoesRepositorio(prefs))
++    }
++
++    @Test
++    fun `tempoBufferSegundos comeca em 8 por padrao`() {
++        assertEquals(8, viewModel.tempoBufferSegundos())
++    }
++
++    @Test
++    fun `definirTempoBufferSegundos muda o valor lido depois`() {
++        viewModel.definirTempoBufferSegundos(12)
++        assertEquals(12, viewModel.tempoBufferSegundos())
++    }
++}
+diff --git a/docs/superpowers/specs/2026-11-10-iptv-player-free-design.md b/docs/superpowers/specs/2026-11-10-iptv-player-free-design.md
+index 95da30f..7bc0c08 100644
+--- a/docs/superpowers/specs/2026-11-10-iptv-player-free-design.md
++++ b/docs/superpowers/specs/2026-11-10-iptv-player-free-design.md
+@@ -269,28 +269,28 @@ Estados: `pendente` → `concluída` (código pronto) → `testada` (verificaç
+ **Fase 0 · Esqueleto e build**
+ - [x] Projeto Android + workflow do Actions que gera APK assinado e publica Release — `validada`
+ - [x] Dono instala o APK "olá mundo" e confirma que a atualização instala por cima — `validada`
+ 
+ **Fase 1 · Contas e carga de dados**
+ - [x] Cadastro de conta Xtream (com "colar link"), várias contas e uma ativa — `validada`
+ - [x] Carga em fluxo para o banco local (canais, filmes, séries) — `validada`
+ - [x] Carga em fluxo da programação — `validada`
+ 
+ **Fase 2 · TV ao vivo** (detalhe completo acima, em "TV ao vivo")
+-- [ ] Tela dividida com player, lista de canais agrupados por qualidade (SD/HD/FHD/4K) e
+-  categorias (incluindo Favoritos) — `pendente`
+-- [ ] Troca de qualidade automática (com tempo configurável) e manual, com selo na tela — `pendente`
+-- [ ] OSD do player (abre ao tocar, some sozinho): canal/programa atual, qualidade, canal
+-  anterior/próximo, atalho pra grade de programação, Gerenciar contas e Configurações — `pendente`
+-- [ ] Aba Programação (Ontem/Hoje/Amanhã) e programa atual na lista — `pendente`
+-- [ ] Tela cheia ao deitar o celular — `pendente`
+-- [ ] Tela Configurações (tempo de buffer/erro antes da troca automática, padrão 8s) — `pendente`
++- [x] Tela dividida com player, lista de canais agrupados por qualidade (SD/HD/FHD/4K) e
++  categorias (incluindo Favoritos) — `testada`
++- [x] Troca de qualidade automática (com tempo configurável) e manual, com selo na tela — `testada`
++- [x] OSD do player (abre ao tocar, some sozinho): canal/programa atual, qualidade, canal
++  anterior/próximo, atalho pra grade de programação, Gerenciar contas e Configurações — `testada`
++- [x] Aba Programação (Ontem/Hoje/Amanhã) e programa atual na lista — `testada`
++- [x] Tela cheia ao deitar o celular — `testada`
++- [x] Tela Configurações (tempo de buffer/erro antes da troca automática, padrão 8s) — `testada`
+ 
+ **Fase 3 · Filmes e séries**
+ - [ ] Listas por categoria, detalhes, temporadas e episódios — `pendente`
+ - [ ] Progresso e retomada — `pendente`
+ 
+ **Fase 4 · Início, busca e favoritos**
+ - [ ] Vitrine do Início — `pendente`
+ - [ ] Busca única com filtro — `pendente`
+ - [ ] Favoritos — `pendente`
+ 
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 0a776ce..8d4be0c 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -15,20 +15,23 @@ room = "2.8.5"
+ workRuntime = "2.12.0"
+ # Versão própria (não reaproveita workRuntime) porque é uma dependência nova, separada —
+ # mesmo valor 2.12.0 por ser a mesma linha do work-runtime já declarado.
+ workTesting = "2.12.0"
+ okhttp = "5.5.1"
+ kotlinxSerializationJson = "1.12.0"
+ kotlinxCoroutinesTest = "1.11.0"
+ robolectric = "4.17"
+ kxml2 = "2.2.2"
+ junit = "4.13.2"
++# Fonte: dl.google.com/android/maven2/androidx/media3/media3-exoplayer/maven-metadata.xml,
++# última estável sem alpha/beta/rc, consultado em 2026-11-12 (ver cabeçalho do plano, T6).
++media3 = "1.11.1"
+ 
+ [libraries]
+ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+ androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+ androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+ 
+ # BOM do Compose: alinha as versões de todas as libs androidx.compose.* abaixo.
+ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+ androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+ androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+@@ -44,18 +47,20 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref =
+ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
+ androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "workTesting" }
+ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+ okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
+ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+ kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
+ junit = { group = "junit", name = "junit", version.ref = "junit" }
++androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
++androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+ 
+ [plugins]
+ android-application = { id = "com.android.application", version.ref = "agp" }
+ # Sem alias para "org.jetbrains.kotlin.android": a partir do AGP 9.0 o Kotlin já vem
+ # embutido (built-in Kotlin) e aplicar esse plugin manualmente quebra o build.
+ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

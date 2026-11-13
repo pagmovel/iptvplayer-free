@@ -1,0 +1,298 @@
+# Review package: c76c57cd034794f8f7734b7f2a983f317b35bb4e..HEAD
+
+## Commits
+ef1720b feat: maquina de estados da troca automatica/manual de qualidade
+
+## Files changed
+ .../pagmovel/iptvplayer/aovivo/CascataQualidade.kt |  98 ++++++++++++
+ .../iptvplayer/aovivo/CascataQualidadeTest.kt      | 177 +++++++++++++++++++++
+ 2 files changed, 275 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt
+new file mode 100644
+index 0000000..2954d1d
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidade.kt
+@@ -0,0 +1,98 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.asSharedFlow
++import kotlinx.coroutines.launch
++
++/** Eventos que a cascata de qualidade emite para quem estiver tocando o canal (T7: o player). */
++sealed class EventoCascata {
++    data class Tocando(val variante: VarianteQualidade) : EventoCascata()
++    data class Trocou(val de: Qualidade, val para: Qualidade) : EventoCascata()
++    object FalhaTerminal : EventoCascata()
++}
++
++/**
++ * Maquina de estados pura da troca automatica/manual de qualidade de um [CanalAgrupado].
++ * Sem Android, sem ExoPlayer -- quem toca o player chama [aoTravar]/[aoEstabilizar]/
++ * [aoErroDefinitivo] e reage aos [eventos].
++ *
++ * `canal.variantes` ja vem ordenada da maior pra menor qualidade (contrato de T1), entao
++ * descer uma qualidade e sempre avancar [indiceAtual] em 1; a pior e o ultimo indice.
++ */
++class CascataQualidade(
++    private val canal: CanalAgrupado,
++    private val tempoBufferMs: Long,
++    private val escopo: CoroutineScope,
++) {
++    private val fluxoEventos = MutableSharedFlow<EventoCascata>(extraBufferCapacity = 16)
++    val eventos: Flow<EventoCascata> = fluxoEventos.asSharedFlow()
++
++    private var indiceAtual = 0
++    private var falhouDeFormaTerminal = false
++    private var timerJob: Job? = null
++
++    fun iniciar() {
++        indiceAtual = 0
++        falhouDeFormaTerminal = false
++        timerJob?.cancel()
++        timerJob = null
++        fluxoEventos.tryEmit(EventoCascata.Tocando(varianteAtual()))
++    }
++
++    /** Buffering: (re)inicia o timer de [tempoBufferMs]. Chamar de novo reinicia do zero. */
++    fun aoTravar() {
++        if (falhouDeFormaTerminal) return
++        timerJob?.cancel()
++        timerJob = escopo.launch {
++            delay(tempoBufferMs)
++            descerQualidade()
++        }
++    }
++
++    /** Reproduzindo bem: cancela o timer pendente, sem descer qualidade. */
++    fun aoEstabilizar() {
++        timerJob?.cancel()
++        timerJob = null
++    }
++
++    /** Erro definitivo do player: desce na hora, sem esperar o timer. */
++    fun aoErroDefinitivo() {
++        if (falhouDeFormaTerminal) return
++        timerJob?.cancel()
++        timerJob = null
++        descerQualidade()
++    }
++
++    /** Troca manual: muda o ponto de partida sem tocar no timer; a cascata automatica
++     * continua valendo a partir daqui, mesmo que tivesse parado numa falha terminal antes. */
++    fun escolherManualmente(qualidade: Qualidade) {
++        val indice = canal.variantes.indexOfFirst { it.qualidade == qualidade }
++        if (indice == -1) return
++        indiceAtual = indice
++        falhouDeFormaTerminal = false
++    }
++
++    /** So tem efeito depois de [EventoCascata.FalhaTerminal]: reinicia da maior qualidade. */
++    fun tentarNovamente() {
++        if (!falhouDeFormaTerminal) return
++        iniciar()
++    }
++
++    private fun descerQualidade() {
++        timerJob = null
++        if (indiceAtual >= canal.variantes.lastIndex) {
++            falhouDeFormaTerminal = true
++            fluxoEventos.tryEmit(EventoCascata.FalhaTerminal)
++            return
++        }
++        val de = varianteAtual().qualidade
++        indiceAtual += 1
++        fluxoEventos.tryEmit(EventoCascata.Trocou(de, varianteAtual().qualidade))
++    }
++
++    private fun varianteAtual() = canal.variantes[indiceAtual]
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+new file mode 100644
+index 0000000..579b0ca
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/aovivo/CascataQualidadeTest.kt
+@@ -0,0 +1,177 @@
++package io.github.pagmovel.iptvplayer.aovivo
++
++import kotlinx.coroutines.flow.toList
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++private const val TEMPO_BUFFER_MS = 8_000L
++
++private fun canalCom(vararg qualidades: Qualidade): CanalAgrupado {
++    val variantes = qualidades.mapIndexed { indice, qualidade ->
++        VarianteQualidade(qualidade, streamId = (indice + 1).toLong())
++    }
++    return CanalAgrupado(
++        nomeBase = "CANAL TESTE",
++        categoriaId = 1,
++        icone = null,
++        epgId = null,
++        numero = null,
++        variantes = variantes,
++    )
++}
++
++class CascataQualidadeTest {
++
++    /** Coleta os eventos num coroutine de fundo com dispatcher nao-confinado, pra o collector
++     * ja estar inscrito (suspenso aguardando) antes de qualquer emissao do teste -- sem isso
++     * o tryEmit do SharedFlow nao tem pra quem entregar o evento e ele se perde. */
++    private fun TestScope.coletar(cascata: CascataQualidade): MutableList<EventoCascata> {
++        val eventos = mutableListOf<EventoCascata>()
++        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
++            cascata.eventos.toList(eventos)
++        }
++        return eventos
++    }
++
++    @Test
++    fun `inicia sempre na maior qualidade disponivel`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++
++        assertEquals(listOf(EventoCascata.Tocando(canal.variantes[0])), eventos)
++    }
++
++    @Test
++    fun `trava por mais que o tempo configurado desce uma qualidade e reinicia o timer`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
++
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS / 2)
++
++        // timer reiniciou do zero na segunda chamada: metade do tempo nao basta
++        assertEquals(2, eventos.size)
++    }
++
++    @Test
++    fun `travar por menos que o tempo configurado nao troca`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS - 1)
++        cascata.aoEstabilizar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertTrue(eventos.none { it is EventoCascata.Trocou })
++    }
++
++    @Test
++    fun `erro definitivo troca na hora, sem esperar o timer`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoErroDefinitivo()
++
++        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
++    }
++
++    @Test
++    fun `canal com 1 variante so vai direto pra falha terminal ao travar`() = runTest {
++        val canal = canalCom(Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++        assertTrue(eventos.none { it is EventoCascata.Trocou })
++    }
++
++    @Test
++    fun `se a pior qualidade tambem falhar, emite falha terminal e para`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // FHD -> HD
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // HD -> SD (pior)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // SD tambem falha -> FalhaTerminal
++
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++        val quantidadeAntes = eventos.size
++
++        // a cascata para: sem tentarNovamente(), nao insiste sozinha
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        assertEquals(quantidadeAntes, eventos.size)
++    }
++
++    @Test
++    fun `escolha manual muda a variante sem desligar a cascata automatica`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.SD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent()
++
++        // prova que a automatica continua agindo a partir da escolha manual: SD era a pior
++        assertEquals(EventoCascata.FalhaTerminal, eventos.last())
++    }
++
++    @Test
++    fun `tentarNovamente apos falha terminal reinicia da maior qualidade`() = runTest {
++        val canal = canalCom(Qualidade.FHD, Qualidade.HD, Qualidade.SD)
++        val cascata = CascataQualidade(canal, TEMPO_BUFFER_MS, this)
++        val eventos = coletar(cascata)
++
++        cascata.iniciar()
++        cascata.escolherManualmente(Qualidade.SD)
++        cascata.aoTravar()
++        advanceTimeBy(TEMPO_BUFFER_MS)
++        runCurrent() // FalhaTerminal
++
++        cascata.tentarNovamente()
++
++        assertEquals(EventoCascata.Tocando(canal.variantes[0]), eventos.last())
++    }
++}

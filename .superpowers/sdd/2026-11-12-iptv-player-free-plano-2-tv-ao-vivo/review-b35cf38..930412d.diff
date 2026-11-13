@@ -1,0 +1,37 @@
+# Review package: b35cf38..HEAD
+
+## Commits
+930412d fix: suite completa real e caso de borda da janela de programacao
+
+## Files changed
+ .../test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt    | 2 ++
+ 1 file changed, 2 insertions(+)
+
+## Diff
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+index bcc337a..04802ec 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+@@ -146,20 +146,22 @@ class CatalogoDaoTest {
+         assertEquals(1, canaisConta2.size)
+         assertEquals(4L, canaisConta2[0].streamId)
+     }
+ 
+     @Test fun `programacao retorna so os programas dentro da janela, ordenados`() = runTest {
+         dao.inserirProgramas(listOf(
+             programa(1, "epg1", 1000L, 1500L, "Programa A"),
+             programa(1, "epg1", 2000L, 2500L, "Programa B"),
+             programa(1, "epg1", 1500L, 2000L, "Programa C"),
+             programa(1, "epg2", 1000L, 1500L, "Outro EPG"),
++            programa(1, "epg1", 2500L, 3000L, "Programa no limite (inicio == fimMs)"),
+             programa(1, "epg1", 3000L, 3500L, "Programa D (fora da janela)"),
+         ))
+ 
+         val programas = dao.programacao(1, "epg1", 1000L, 2500L)
+ 
++        // Janela [1000, 2500): inclui 1000, 1500, 2000, exclui 2500 (inclusive limit)
+         assertEquals(3, programas.size)
+         assertEquals(listOf("Programa A", "Programa C", "Programa B"), programas.map { it.titulo })
+         assertEquals(listOf(1000L, 1500L, 2000L), programas.map { it.inicio })
+     }
+ }

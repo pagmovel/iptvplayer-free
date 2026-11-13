@@ -1,0 +1,109 @@
+# Review package: 930412d961659f5f26b94ce5a97f35ef90383758..HEAD
+
+## Commits
+c76c57c feat: configuracao do tempo de buffer antes da troca de qualidade
+
+## Files changed
+ .../java/io/github/pagmovel/iptvplayer/AppIptv.kt  |  2 ++
+ .../configuracoes/ConfiguracoesRepositorio.kt      | 17 ++++++++++
+ .../configuracoes/ConfiguracoesRepositorioTest.kt  | 36 ++++++++++++++++++++++
+ 3 files changed, 55 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+index 04c4075..7dd3521 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/AppIptv.kt
+@@ -1,13 +1,14 @@
+ package io.github.pagmovel.iptvplayer
+ import android.app.Application
+ import androidx.room.Room
++import io.github.pagmovel.iptvplayer.configuracoes.ConfiguracoesRepositorio
+ import io.github.pagmovel.iptvplayer.conta.Cofre
+ import io.github.pagmovel.iptvplayer.conta.CofreKeystore
+ import io.github.pagmovel.iptvplayer.conta.ContasRepositorio
+ import io.github.pagmovel.iptvplayer.conta.CredenciaisXtream
+ import io.github.pagmovel.iptvplayer.dados.BancoApp
+ import io.github.pagmovel.iptvplayer.xtream.XtreamApi
+ import okhttp3.OkHttpClient
+ 
+ /**
+  * Monta à mão as dependências do app — banco, cofre de senhas e repositório de contas — sem
+@@ -18,11 +19,12 @@ import okhttp3.OkHttpClient
+  */
+ class AppIptv : Application() {
+     val banco: BancoApp by lazy {
+         Room.databaseBuilder(this, BancoApp::class.java, "iptv.db")
+             .addMigrations(BancoApp.MIGRACAO_1_2)
+             .build()
+     }
+     val cofre: Cofre by lazy { CofreKeystore() }
+     val criarApi: (CredenciaisXtream) -> XtreamApi = { cred -> XtreamApi(OkHttpClient(), cred) }
+     val contasRepositorio: ContasRepositorio by lazy { ContasRepositorio(banco, cofre, criarApi) }
++    val configuracoes: ConfiguracoesRepositorio by lazy { ConfiguracoesRepositorio(getSharedPreferences("config", MODE_PRIVATE)) }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt
+new file mode 100644
+index 0000000..017e3c7
+--- /dev/null
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorio.kt
+@@ -0,0 +1,17 @@
++package io.github.pagmovel.iptvplayer.configuracoes
++
++import android.content.SharedPreferences
++
++class ConfiguracoesRepositorio(private val prefs: SharedPreferences) {
++    private companion object {
++        private const val CHAVE_TEMPO_BUFFER_MS = "tempo_buffer_ms"
++        private const val TEMPO_BUFFER_PADRAO_MS = 8000L
++    }
++
++    fun tempoBufferMs(): Long =
++        prefs.getLong(CHAVE_TEMPO_BUFFER_MS, TEMPO_BUFFER_PADRAO_MS)
++
++    fun definirTempoBufferSegundos(segundos: Int) {
++        prefs.edit().putLong(CHAVE_TEMPO_BUFFER_MS, segundos * 1000L).apply()
++    }
++}
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt
+new file mode 100644
+index 0000000..37c9e03
+--- /dev/null
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/configuracoes/ConfiguracoesRepositorioTest.kt
+@@ -0,0 +1,36 @@
++package io.github.pagmovel.iptvplayer.configuracoes
++
++import android.content.SharedPreferences
++import org.junit.Before
++import org.junit.Test
++import org.junit.Assert.assertEquals
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++
++@RunWith(RobolectricTestRunner::class)
++class ConfiguracoesRepositorioTest {
++    private lateinit var prefs: SharedPreferences
++    private lateinit var repo: ConfiguracoesRepositorio
++
++    @Before
++    fun montar() {
++        prefs = RuntimeEnvironment.getApplication().getSharedPreferences("config", 0)
++        prefs.edit().clear().apply()
++        repo = ConfiguracoesRepositorio(prefs)
++    }
++
++    @Test
++    fun `tempoBufferMs comeca em 8000 (8 segundos) por padrao`() {
++        assertEquals(8000L, repo.tempoBufferMs())
++    }
++
++    @Test
++    fun `definirTempoBufferSegundos muda o valor lido depois`() {
++        repo.definirTempoBufferSegundos(5)
++        assertEquals(5000L, repo.tempoBufferMs())
++
++        repo.definirTempoBufferSegundos(10)
++        assertEquals(10000L, repo.tempoBufferMs())
++    }
++}

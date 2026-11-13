@@ -1,0 +1,139 @@
+# Review package: d8e1b82b4a7061c76dfc075e5937b6e5736d83f7..HEAD
+
+## Commits
+b35cf38 feat: consultas de categoria/canais/programacao pra TV ao vivo
+
+## Files changed
+ .../pagmovel/iptvplayer/dados/CatalogoDao.kt       |  9 ++++
+ .../pagmovel/iptvplayer/dados/CatalogoDaoTest.kt   | 57 ++++++++++++++++++++++
+ 2 files changed, 66 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+index 7dcd63b..554c1bb 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/dados/CatalogoDao.kt
+@@ -88,20 +88,29 @@ abstract class CatalogoDao {
+     }
+ 
+     // REPLACE: favoritar de novo o mesmo canal (mesma chave) só atualiza criadoEm, em vez de
+     // lançar SQLiteConstraintException.
+     @Insert(onConflict = OnConflictStrategy.REPLACE)
+     abstract suspend fun favoritar(favorito: CanalFavorito)
+     @Query("DELETE FROM CanalFavorito WHERE contaId = :contaId AND nomeBase = :nomeBase AND categoriaId = :categoriaId")
+     abstract suspend fun desfavoritar(contaId: Long, nomeBase: String, categoriaId: Long)
+     @Query("SELECT * FROM CanalFavorito WHERE contaId = :contaId")
+     abstract fun favoritos(contaId: Long): Flow<List<CanalFavorito>>
++
++    @Query("SELECT * FROM Categoria WHERE contaId = :contaId AND tipo = :tipo")
++    abstract fun categorias(contaId: Long, tipo: TipoConteudo): Flow<List<Categoria>>
++
++    @Query("SELECT * FROM Canal WHERE contaId = :contaId")
++    abstract fun canais(contaId: Long): Flow<List<Canal>>
++
++    @Query("SELECT * FROM Programa WHERE contaId = :contaId AND epgId = :epgId AND inicio >= :inicioMs AND inicio < :fimMs ORDER BY inicio ASC")
++    abstract suspend fun programacao(contaId: Long, epgId: String, inicioMs: Long, fimMs: Long): List<Programa>
+ }
+ 
+ /**
+  * Prepara o termo digitado para o MATCH do FTS4: separa por espaço, escapa aspas e junta
+  * cada palavra como `"palavra*"` — o `*` precisa ficar DENTRO das aspas para valer como
+  * prefixo (https://www.sqlite.org/fts3.html#fts4query, exemplo `"lin* app*"`; `"palavra"*`
+  * com o `*` fora não aplica prefixo — é um erro fácil de cometer e que este comentário
+  * existe para não repetir). O espaço entre os termos é AND implícito no FTS4.
+  */
+ private fun termoParaFts(termo: String): String =
+diff --git a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+index 9df1ccb..bcc337a 100644
+--- a/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
++++ b/app/src/test/java/io/github/pagmovel/iptvplayer/dados/CatalogoDaoTest.kt
+@@ -40,20 +40,23 @@ class CatalogoDaoTest {
+             contaId = contaId, streamId = streamId, nome = nome, categoriaId = null, capa = null,
+             extensao = null, ano = null, nota = null, adicionadoEm = null,
+         )
+ 
+     private fun serie(seriesId: Long, nome: String, contaId: Long = 1): Serie =
+         Serie(
+             contaId = contaId, seriesId = seriesId, nome = nome, categoriaId = null, capa = null,
+             sinopse = null, ano = null, nota = null, modificadaEm = null,
+         )
+ 
++    private fun programa(contaId: Long, epgId: String, inicio: Long, fim: Long, titulo: String): Programa =
++        Programa(contaId = contaId, epgId = epgId, inicio = inicio, fim = fim, titulo = titulo, descricao = null)
++
+     @Test fun `busca ignora acento e maiusculas`() = runTest {
+         dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(contaId = 1, termo = "sao paulo").map { it.nome })
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "SÃO").map { it.nome })
+     }
+ 
+     @Test fun `busca por prefixo enquanto digita`() = runTest {
+         dao.inserirCanais(listOf(canal(1, "São Paulo HD"), canal(2, "Rio FHD")))
+         assertEquals(listOf("São Paulo HD"), dao.buscarNomesCanais(1, "pau").map { it.nome })
+     }
+@@ -98,11 +101,65 @@ class CatalogoDaoTest {
+ 
+     @Test fun `favoritar e desfavoritar um canal agrupado`() = runTest {
+         val favorito = CanalFavorito(contaId = 1, nomeBase = "Globo", categoriaId = -1L, criadoEm = 1000L)
+ 
+         dao.favoritar(favorito)
+         assertEquals(listOf(favorito), dao.favoritos(1).first())
+ 
+         dao.desfavoritar(contaId = 1, nomeBase = "Globo", categoriaId = -1L)
+         assertEquals(emptyList<CanalFavorito>(), dao.favoritos(1).first())
+     }
++
++    @Test fun `categorias filtra por tipo`() = runTest {
++        dao.inserirCategorias(listOf(
++            Categoria(1, TipoConteudo.AO_VIVO, 1, "Esportes"),
++            Categoria(1, TipoConteudo.AO_VIVO, 2, "Filmes"),
++            Categoria(1, TipoConteudo.FILME, 3, "Ação"),
++            Categoria(1, TipoConteudo.SERIE, 4, "Drama"),
++        ))
++
++        val aoVivos = dao.categorias(1, TipoConteudo.AO_VIVO).first()
++        assertEquals(2, aoVivos.size)
++        assertEquals(setOf(1L, 2L), aoVivos.map { it.categoriaId }.toSet())
++
++        val filmes = dao.categorias(1, TipoConteudo.FILME).first()
++        assertEquals(1, filmes.size)
++        assertEquals(3L, filmes[0].categoriaId)
++
++        val series = dao.categorias(1, TipoConteudo.SERIE).first()
++        assertEquals(1, series.size)
++        assertEquals(4L, series[0].categoriaId)
++    }
++
++    @Test fun `canais lista todos os canais da conta`() = runTest {
++        dao.inserirCanais(listOf(
++            canal(1, "Globo HD", contaId = 1),
++            canal(2, "SporTV HD", contaId = 1),
++            canal(3, "Warner HD", contaId = 1),
++            canal(4, "Outros", contaId = 2),
++        ))
++
++        val canaisConta1 = dao.canais(1).first()
++        assertEquals(3, canaisConta1.size)
++        assertEquals(setOf(1L, 2L, 3L), canaisConta1.map { it.streamId }.toSet())
++
++        val canaisConta2 = dao.canais(2).first()
++        assertEquals(1, canaisConta2.size)
++        assertEquals(4L, canaisConta2[0].streamId)
++    }
++
++    @Test fun `programacao retorna so os programas dentro da janela, ordenados`() = runTest {
++        dao.inserirProgramas(listOf(
++            programa(1, "epg1", 1000L, 1500L, "Programa A"),
++            programa(1, "epg1", 2000L, 2500L, "Programa B"),
++            programa(1, "epg1", 1500L, 2000L, "Programa C"),
++            programa(1, "epg2", 1000L, 1500L, "Outro EPG"),
++            programa(1, "epg1", 3000L, 3500L, "Programa D (fora da janela)"),
++        ))
++
++        val programas = dao.programacao(1, "epg1", 1000L, 2500L)
++
++        assertEquals(3, programas.size)
++        assertEquals(listOf("Programa A", "Programa C", "Programa B"), programas.map { it.titulo })
++        assertEquals(listOf(1000L, 1500L, 2000L), programas.map { it.inicio })
++    }
+ }
