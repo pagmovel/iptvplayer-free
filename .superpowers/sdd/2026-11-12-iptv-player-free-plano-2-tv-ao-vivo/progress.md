@@ -514,3 +514,33 @@ ruling acima, sem impacto em código ou em ordem de execução.
   preciso de: print da tela exata, canal, e se os chips Ontem/Hoje/Amanhã apareceram ou não.
   Dono testou em outro canal também e funcionou — reforça que não é específico de um canal.
   Fecho como inconclusivo, não reproduzível; sigo sem fix.
+
+- **Patch v0.2.1 publicado** (push + tag, eu/controlador diretamente) com o fix do modo
+  imersivo (`926c4e4`). Run `43428075245`: job `testes` = success, job `release` = success.
+  Release real: https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.2.1, anexo
+  `iptv-player-free-0.2.1.apk` (12.110.118 bytes).
+
+- **Achado real 3 (causa raiz confirmada, print real)**: "sem botões de canal anterior/
+  próximo" NÃO era o nosso `Osd` — era o controle NATIVO do Media3 `PlayerView` aparecendo
+  por cima (retroceder/play/avançar 10s, item anterior/próximo de playlist, barra de
+  progresso, engrenagem). `PlayerView(context).apply {...}` em `AoVivoTela.kt` nunca
+  desativou `useController` (default `true`). Explica também a confusão: o controle nativo
+  não tem noção de "canal", só item de playlist (que nem usamos — 1 `MediaItem` por vez).
+- **Achado real 4 (gap confirmado no código)**: sem spinner durante buffering — só existe
+  `CircularProgressIndicator` pro carregamento INICIAL da tela; nada reage a
+  `STATE_BUFFERING` depois disso; `PlayerView` sem `setShowBuffering`.
+- Implementador despachado pros 2 juntos: `useController = false` + spinner de buffering
+  exposto via o listener já existente de `PlayerAoVivo` (cobrindo troca de canal E de
+  qualidade, sem aparecer sobre `FalhaTerminal`) (modelo sonnet), agentId
+  `a743af264c60ed162`.
+
+- **Achados reais 3 e 4: complete.** Revisor aprovou (0 Crítico, 0 Importante) — confirmou
+  o único `PlayerView` do projeto, rastreou os 3 únicos emissores de evento da cascata
+  (`iniciar`/`escolherManualmente`/`descerQualidade`, todos cobertos pelo reset do spinner),
+  e investigou a condição de corrida pedida (dois coletores do mesmo `SharedFlow`, ordem de
+  inscrição segura, sem janela onde o spinner fica preso sobre `FalhaTerminal`). 2 Minor
+  (deferred): sobreposição cosmética entre o scrim do `Osd` e o spinner quando os dois estão
+  visíveis ao mesmo tempo (tocar a tela durante um buffering); imprecisão no relatório do
+  implementador sobre a transição de estado (READY→BUFFERING direto, não
+  READY→IDLE→BUFFERING — não afeta a correção).
+- Commits `681bfc7`/`7d32801` prontos pra nova tag de patch.
