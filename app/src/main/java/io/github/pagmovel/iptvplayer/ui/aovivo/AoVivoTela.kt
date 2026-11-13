@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -160,10 +161,29 @@ fun AoVivoTela(
                             // sistema e dispara ON_STOP (que pausa o player) so por falta de
                             // toque, mesmo com o usuario assistindo.
                             keepScreenOn = true
+                            // Bug real pos-T11 (validacao manual do dono, print real): sem
+                            // isso o controle NATIVO do Media3 (retroceder/avancar 10s, play/
+                            // pause, item anterior/proximo de playlist, barra de progresso)
+                            // aparecia ao tocar na tela em vez do nosso Osd (que tem "< Canal"/
+                            // "Canal >", qualidade, etc). useController=true e o padrao do
+                            // Media3; so o nosso Osd (acionado pelo .clickable do Box pai) pode
+                            // controlar a interacao aqui.
+                            useController = false
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                // Bug real pos-T11: spinner de buffering sobreposto ao video -- cobre tanto o
+                // carregamento normal quanto a troca de qualidade da cascata (os dois emitem
+                // STATE_BUFFERING no PlayerAoVivo). Nao aparece sobre o aviso de FalhaTerminal
+                // porque PlayerAoVivo zera bufferizando nesse ramo (ver PlayerAoVivo.abrir).
+                val bufferizando by viewModel.bufferizando.collectAsState()
+                if (bufferizando) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
 
                 Osd(
                     visivel = osdVisivel,

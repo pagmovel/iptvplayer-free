@@ -133,6 +133,10 @@ class AoVivoViewModel(private val app: AppIptv) {
 
     val exoPlayer: ExoPlayer get() = playerAoVivo.exoPlayer
 
+    /** Bug real pos-T11: spinner de buffering na tela -- repassa o estado exposto por
+     * [PlayerAoVivo.bufferizando] (mesma ponte que [exoPlayer] ja faz). */
+    val bufferizando: StateFlow<Boolean> get() = playerAoVivo.bufferizando
+
     lateinit var categorias: Flow<List<Categoria>>
         private set
     lateinit var favoritos: Flow<List<CanalFavorito>>

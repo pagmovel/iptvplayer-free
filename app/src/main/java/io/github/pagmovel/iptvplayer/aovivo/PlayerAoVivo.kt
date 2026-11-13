@@ -10,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -44,12 +47,29 @@ class PlayerAoVivo(
     private var cascataAtual: CascataQualidade? = null
     private var jobColeta: Job? = null
 
+    private val _bufferizando = MutableStateFlow(false)
+
+    /** Bug real pos-T11 (validacao manual do dono): trocar de canal/qualidade nao mostrava
+     * nada enquanto o video carregava -- so a imagem anterior congelada ou tela preta. Exposto
+     * aqui (nao em [CascataQualidade]) porque e o mesmo listener que ja reage a
+     * STATE_BUFFERING/STATE_READY pra acionar aoTravar()/aoEstabilizar() -- um StateFlow novo
+     * em vez de outro listener. Cobre carregamento inicial E toda troca de qualidade da
+     * cascata (o Media3 emite STATE_BUFFERING nos dois casos); zerado explicitamente no ramo
+     * de FalhaTerminal de [abrir] pra nao sobrar `true` por cima do aviso de erro. */
+    val bufferizando: StateFlow<Boolean> = _bufferizando.asStateFlow()
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_BUFFERING -> cascataAtual?.aoTravar()
-                    Player.STATE_READY -> cascataAtual?.aoEstabilizar()
+                    Player.STATE_BUFFERING -> {
+                        _bufferizando.value = true
+                        cascataAtual?.aoTravar()
+                    }
+                    Player.STATE_READY -> {
+                        _bufferizando.value = false
+                        cascataAtual?.aoEstabilizar()
+                    }
                 }
             }
 
@@ -93,7 +113,9 @@ class PlayerAoVivo(
                     cascata.aoTravar()
                 } else {
                     // Importante 4: FalhaTerminal nao pode deixar a conexao HTTP aberta atras
-                    // do aviso de erro.
+                    // do aviso de erro. Zera o spinner tambem -- stop() nao garante passar por
+                    // STATE_READY, e o aviso de erro e o feedback aqui, nao o spinner.
+                    _bufferizando.value = false
                     exoPlayer.stop()
                 }
             }
@@ -111,6 +133,7 @@ class PlayerAoVivo(
         jobColeta?.cancel()
         jobColeta = null
         cascataAtual?.aoEstabilizar()
+        _bufferizando.value = false
         exoPlayer.stop()
     }
 
