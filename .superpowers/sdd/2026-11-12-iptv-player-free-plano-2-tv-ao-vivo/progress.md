@@ -471,3 +471,46 @@ ruling acima, sem impacto em código ou em ordem de execução.
 - **Task 10: complete por inteiro** (todos os 6 passos, commits 352d3da..6452ea2 + tag
   v0.2.0). **Plano 2 completo exceto T11** (validação do dono no celular, contra o provedor
   real — próximo passo, trabalho do dono, não dispatch).
+
+## T11 — validação real do dono (2026-11-13)
+
+- Dono começou a validar no celular, contra o provedor real, com prints reais (Warner
+  Channel tocando, abas Canais/Programacao, chips Todos/Favoritos/categoria visíveis).
+- **Achado real 1 (confirmado por print, não suposição)**: em paisagem, a barra de status
+  (hora/notificações) e a barra de navegação do sistema continuam visíveis por cima do
+  vídeo — a T10 só escondeu a NOSSA UI (Voltar/TabRow/abas), nunca implementou o modo
+  imersivo real do Android. Dono esperava "sumir em tudo, só aparecer se deslizar o dedo,
+  como em qualquer aplicativo" (modo imersivo "sticky" padrão). Confirmado no código: nenhum
+  uso de `WindowInsetsController`/`systemBars`/`immersive` em lugar nenhum do projeto antes
+  deste fix. Implementador despachado pra `DisposableEffect(telaCheia)` com
+  `WindowInsetsControllerCompat` (modelo sonnet), agentId `afe14eff4bef70928`.
+- **Achado real 2 (ainda sem diagnóstico — aguardando resposta do dono)**: "a programação
+  ainda não exibe nada". Perguntei: mostra o texto "Sem programação" ou fica literalmente em
+  branco? Em qual canal? Sem essa resposta ainda não investigo (pode ser canal sem EPG de
+  verdade — comportamento esperado — ou bug real).
+- **Feedback de design (não é bug, não entra nesta rodada de fix)**: dono achou a cor
+  primária (`Destaque = #4FC3F7` em `ui/Tema.kt`, confirmado no código — é a cor aprovada no
+  Plano 1, só que aplicada em muito mais lugares agora) ruim na prática, e citou "problemas
+  sérios de design" de forma mais ampla. **Perguntei e o dono escolheu**: terminar a
+  validação funcional da T11 primeiro, design em sessão separada depois. Registrado em
+  memória do projeto (`.claude/memory/plano2-feedback-design-t11.md`), não no ledger do SDD
+  (memória sobrevive a este plano, ledger não).
+
+- **Achado real 1: complete.** Fix do modo imersivo (`926c4e4`, 27 linhas em `AoVivoTela.kt`)
+  revisado e aprovado — 0 Crítico, 0 Importante. Revisor confirmou (não supôs): o cast
+  `(view.context as Activity)` é seguro neste projeto (MainActivity é ComponentActivity pura,
+  sem Fragment/Preview); os 4 caminhos de restauração das barras (retrato, canal null,
+  trocar de tela, fechar o app) via `Navegacao.kt` real; `configChanges` da T6 intacto; sem
+  efeito colateral no resto do app. 2 Minor cosméticos (referência imprecisa ao Accompanist
+  no relatório do implementador; `systemBarsBehavior` não resetado no `onDispose`, inofensivo)
+  — deferred. Validação visual real (barras somem/voltam com deslizar de verdade) ainda
+  depende do celular do dono — próximo passo de T11.
+
+- **Achado real 2: [INCONCLUSIVO], não é bug confirmado.** Dono não reproduziu de novo —
+  "ficou em branco" (nem o texto "Sem programacao.", pelo relato) na primeira vez, mas
+  "executei novamente e a programação apareceu" na segunda. Sem reprodução consistente, sem
+  print da tela em branco, não investigo mais a fundo nem proponho fix (regra: teste que não
+  decidiu é inconclusivo, não vira conclusão porque "faz sentido" supor). Se reaparecer,
+  preciso de: print da tela exata, canal, e se os chips Ontem/Hoje/Amanhã apareceram ou não.
+  Dono testou em outro canal também e funcionou — reforça que não é específico de um canal.
+  Fecho como inconclusivo, não reproduzível; sigo sem fix.
