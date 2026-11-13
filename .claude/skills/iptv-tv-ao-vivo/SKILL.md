@@ -104,6 +104,46 @@ que dependa de canal agrupado, troca de qualidade ou tempo de buffer configuráv
   num `telaAntesDeConfiguracoes`, pra "Voltar" retornar pro lugar certo em vez de sempre pro
   Resumo.
 
+## Pegadinhas cross-cutting achadas só na revisão final do Plano 2 (não visíveis tarefa a tarefa)
+
+Três comportamentos do Media3/ExoPlayer que nenhuma revisão isolada de T5-T9 pegou, porque
+cada tarefa sozinha parecia correta — só apareceram revisando a integração completa (T1-T10
+juntas), confirmados lendo o bytecode real do Media3 1.11.1, não suposição:
+
+- **`prepare()` chamado enquanto o player já está em `STATE_BUFFERING` não dispara
+  `onPlaybackStateChanged` de novo** (o Media3 só avisa quando o estado muda, e
+  `setMediaSourcesInternal` já mascara pra `BUFFERING` antes do `prepare()` rodar). Isso
+  quebrava o timer da cascata: ao vencer, `PlayerAoVivo` trocava de `MediaItem` mas a
+  cascata nunca sabia que a variante nova também estava "carregando", e ficava sem timer
+  pra próxima tentativa. **Correção**: `PlayerAoVivo.abrir()` chama `cascata.aoTravar()`
+  explicitamente depois de `setMediaItem`/`prepare`/`play` — não confie só nos callbacks do
+  `Player.Listener` pra saber que uma troca de variante começou.
+- **`exoPlayer.pause()` sozinho não é "parar de verdade" em `ON_STOP`.** Pausar não cancela
+  o listener, a coleta de `cascata.eventos` nem o timer da cascata — se o timer vencer com o
+  app em segundo plano, o coletor ainda reage a `Trocou` chamando `play()` de novo (áudio
+  tocando minimizado + conexão aberta, viola o limite de 2 conexões do provedor).
+  **Correção**: `PlayerAoVivo.parar()` (cancela `jobColeta`, chama `aoEstabilizar()` na
+  cascata atual, só então `exoPlayer.stop()`) é o que `pausar()` deve chamar, nunca
+  `exoPlayer.pause()` isolado.
+- **`EventoCascata.Trocou` carrega `VarianteQualidade`, não só `Qualidade`** (mudou na
+  revisão final; T5 original carregava só a qualidade). Motivo: se um `CanalAgrupado` tiver
+  duas variantes da MESMA qualidade (provedor duplicando o canal, ou um sem sufixo caindo no
+  fallback `Qualidade.SD` ao lado de um "X SD" explícito no mesmo grupo), resolver a variante
+  de novo por `first { it.qualidade == evento.para }` sempre pega a primeira — se essa
+  travou, a cascata "desce" pra ela de novo, repetindo o mesmo stream que já falhou.
+  `CascataQualidade` agora emite a `VarianteQualidade` exata (`varianteAtual()`, pelo índice
+  real), e `PlayerAoVivo`/`Osd` usam `evento.para` direto, sem resolver de novo.
+- **[A VERIFICAR] mesma família de bug ainda existe no caminho MANUAL**:
+  `escolherManualmente(qualidade: Qualidade)` continua resolvendo por
+  `indexOfFirst { it.qualidade == qualidade }` — num grupo com duas variantes da mesma
+  qualidade, escolher manualmente pode reselecionar a que já falhou, e o OSD mostra os dois
+  botões daquela qualidade destacados juntos. Não corrigido ainda (achado da re-revisão do
+  fix wave, fora do escopo daquela rodada) — correção análoga à do `Trocou` seria
+  `escolherManualmente` passar a receber `VarianteQualidade`/índice em vez de `Qualidade`.
+- **`keepScreenOn = true` no `PlayerView`** (`AoVivoTela.kt`) é obrigatório — sem ele a tela
+  apaga durante a reprodução (ninguém toca a tela só assistindo), dispara `ON_STOP`, e o
+  vídeo para como se o usuário tivesse saído do app.
+
 ## Como validar
 
 - Automatizado (dados sintéticos): `./scripts/gradle.ps1 testDebugUnitTest`. Cobre o
