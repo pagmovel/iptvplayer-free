@@ -1,5 +1,6 @@
 package io.github.pagmovel.iptvplayer.ui.aovivo
 
+import android.app.Activity
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,8 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.ui.PlayerView
@@ -114,6 +119,28 @@ fun AoVivoTela(
     // de Configuracoes deitado) nao pode cair em tela cheia sem saida -- usa a tela dividida,
     // com a lista de canais visivel, mesmo em paisagem.
     val telaCheia = emPaisagem && canalAtual != null
+
+    // Bug real pos-T10 (validacao manual do dono): T10 so escondia a NOSSA UI (Voltar/abas) em
+    // telaCheia -- as barras do SISTEMA (status + navegacao do Android) continuavam por cima do
+    // video. setDecorFitsSystemWindows(false) fica condicionado ao mesmo telaCheia (em vez de
+    // uma chamada unica no onCreate da Activity) pra nao afetar o layout do resto do app (Resumo/
+    // Contas/Configuracoes), que nunca entra em telaCheia. onDispose cobre tanto "voltou para
+    // retrato" (DisposableEffect refaz com a chave nova) quanto "saiu da tela de TV ao vivo
+    // direto de paisagem" (composable sai de composicao) -- os dois precisam restaurar as barras.
+    val view = LocalView.current
+    DisposableEffect(telaCheia) {
+        val window = (view.context as Activity).window
+        val controller = WindowCompat.getInsetsController(window, view)
+        if (telaCheia) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
