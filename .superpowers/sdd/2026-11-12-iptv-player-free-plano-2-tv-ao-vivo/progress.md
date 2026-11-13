@@ -544,3 +544,8 @@ ruling acima, sem impacto em código ou em ordem de execução.
   implementador sobre a transição de estado (READY→BUFFERING direto, não
   READY→IDLE→BUFFERING — não afeta a correção).
 - Commits `681bfc7`/`7d32801` prontos pra nova tag de patch.
+
+- **Patch v0.2.2 publicado** (push + tag, eu/controlador diretamente) com useController=false
+  e spinner de buffering. Run `43443406289`: testes=success, release=success. Release real:
+  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.2.2, anexo
+  `iptv-player-free-0.2.2.apk` (12.110.118 bytes).
