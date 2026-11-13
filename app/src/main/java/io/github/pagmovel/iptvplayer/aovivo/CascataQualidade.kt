@@ -11,7 +11,12 @@ import kotlinx.coroutines.launch
 /** Eventos que a cascata de qualidade emite para quem estiver tocando o canal (T7: o player). */
 sealed class EventoCascata {
     data class Tocando(val variante: VarianteQualidade) : EventoCascata()
-    data class Trocou(val de: Qualidade, val para: Qualidade) : EventoCascata()
+    // Revisao final (Importante 9): carrega a VarianteQualidade inteira, nao so a Qualidade --
+    // um CanalAgrupado pode ter duas variantes da mesma Qualidade (provedor duplicando o
+    // canal, ou um sem sufixo reconhecido caindo no fallback SD). Resolver por
+    // `first { it.qualidade == ... }` sempre acha a mesma (a primeira), repetindo a variante
+    // que ja falhou em vez da outra.
+    data class Trocou(val de: VarianteQualidade, val para: VarianteQualidade) : EventoCascata()
     object FalhaTerminal : EventoCascata()
 }
 
@@ -75,10 +80,10 @@ class CascataQualidade(
     fun escolherManualmente(qualidade: Qualidade) {
         val indice = canal.variantes.indexOfFirst { it.qualidade == qualidade }
         if (indice == -1 || indice == indiceAtual) return
-        val de = varianteAtual().qualidade
+        val de = varianteAtual()
         indiceAtual = indice
         falhouDeFormaTerminal = false
-        fluxoEventos.tryEmit(EventoCascata.Trocou(de, qualidade))
+        fluxoEventos.tryEmit(EventoCascata.Trocou(de, varianteAtual()))
     }
 
     /** So tem efeito depois de [EventoCascata.FalhaTerminal]: reinicia da maior qualidade. */
@@ -94,9 +99,9 @@ class CascataQualidade(
             fluxoEventos.tryEmit(EventoCascata.FalhaTerminal)
             return
         }
-        val de = varianteAtual().qualidade
+        val de = varianteAtual()
         indiceAtual += 1
-        fluxoEventos.tryEmit(EventoCascata.Trocou(de, varianteAtual().qualidade))
+        fluxoEventos.tryEmit(EventoCascata.Trocou(de, varianteAtual()))
     }
 
     private fun varianteAtual() = canal.variantes[indiceAtual]

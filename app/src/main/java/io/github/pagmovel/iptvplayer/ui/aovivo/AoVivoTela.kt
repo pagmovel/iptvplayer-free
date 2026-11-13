@@ -110,35 +110,33 @@ fun AoVivoTela(
     // proprio); como o manifest ja declara configChanges="orientation|screenSize|screenLayout"
     // (T6), a Activity nao recria e o PlayerView/ExoPlayer nao sao recriados por isso.
     val emPaisagem = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    // Revisao final (Importante 7): sem canal selecionado (abrir a tela ja deitado, ou voltar
+    // de Configuracoes deitado) nao pode cair em tela cheia sem saida -- usa a tela dividida,
+    // com a lista de canais visivel, mesmo em paisagem.
+    val telaCheia = emPaisagem && canalAtual != null
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            if (!emPaisagem) {
+            if (!telaCheia) {
                 TextButton(onClick = onVoltar) { Text("Voltar") }
             }
 
             Box(
-                (if (emPaisagem) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(220.dp))
+                (if (telaCheia) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(220.dp))
                     .clickable(onClick = { aoTocarNaTela() }),
             ) {
                 AndroidView(
-                    factory = { context -> PlayerView(context).apply { player = viewModel.exoPlayer } },
+                    factory = { context ->
+                        PlayerView(context).apply {
+                            player = viewModel.exoPlayer
+                            // Critico 1: sem isso o Android apaga a tela pelo timeout do
+                            // sistema e dispara ON_STOP (que pausa o player) so por falta de
+                            // toque, mesmo com o usuario assistindo.
+                            keepScreenOn = true
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
-
-                // Global Constraint: so mostra erro (e o botao manual) quando a qualidade mais
-                // baixa tambem falhou -- nunca tenta de novo sozinho sem esse toque.
-                if (viewModel.eventoAtual == EventoCascata.FalhaTerminal) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Nao foi possivel tocar o canal, nem na qualidade mais baixa.",
-                                color = MaterialTheme.colorScheme.onError,
-                            )
-                            Button(onClick = { viewModel.tentarNovamente() }) { Text("Tentar de novo") }
-                        }
-                    }
-                }
 
                 Osd(
                     visivel = osdVisivel,
@@ -154,11 +152,28 @@ fun AoVivoTela(
                     onGerenciarContas = onGerenciarContas,
                     onAbrirConfiguracoes = onAbrirConfiguracoes,
                 )
+
+                // Global Constraint: so mostra erro (e o botao manual) quando a qualidade mais
+                // baixa tambem falhou -- nunca tenta de novo sozinho sem esse toque. Desenhado
+                // DEPOIS do Osd (Importante 5): o Osd ocupa a tela toda e e clicavel, entao
+                // desenhado antes ele intercepta o toque antes de chegar no botao "Tentar de
+                // novo" por baixo.
+                if (viewModel.eventoAtual == EventoCascata.FalhaTerminal) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Nao foi possivel tocar o canal, nem na qualidade mais baixa.",
+                                color = MaterialTheme.colorScheme.onError,
+                            )
+                            Button(onClick = { viewModel.tentarNovamente() }) { Text("Tentar de novo") }
+                        }
+                    }
+                }
             }
 
             // Paisagem (Passo 1, T10): sem Voltar/abas por fora -- o Osd ja tem seu proprio
             // "voltar", e a grade de programacao (overlay abaixo) nao depende de aba nenhuma.
-            if (!emPaisagem) {
+            if (!telaCheia) {
                 TabRow(selectedTabIndex = aba.ordinal) {
                     Tab(selected = aba == AbaAoVivo.CANAIS, onClick = { aba = AbaAoVivo.CANAIS }, text = { Text("Canais") })
                     Tab(

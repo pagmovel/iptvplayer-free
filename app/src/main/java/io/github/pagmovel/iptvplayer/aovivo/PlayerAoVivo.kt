@@ -72,21 +72,46 @@ class PlayerAoVivo(
 
         jobColeta = escopo.launch {
             cascata.eventos.collect { evento ->
+                // Revisao final (Importante 9): evento.para ja e a VarianteQualidade exata
+                // escolhida pela cascata -- resolver de novo por `first { it.qualidade == ... }`
+                // podia acertar uma variante diferente (mesma qualidade duplicada no grupo).
                 val variante = when (evento) {
                     is EventoCascata.Tocando -> evento.variante
-                    is EventoCascata.Trocou ->
-                        canal.variantes.first { it.qualidade == evento.para }
+                    is EventoCascata.Trocou -> evento.para
                     is EventoCascata.FalhaTerminal -> null
                 }
                 if (variante != null) {
                     exoPlayer.setMediaItem(MediaItem.fromUri(montarUrl(variante.streamId)))
                     exoPlayer.prepare()
                     exoPlayer.play()
+                    // Critico 2: toda variante nova comeca "carregando" do ponto de vista da
+                    // cascata. Sem isso, quando o timer da cascata vence, o ExoPlayer ja esta
+                    // em STATE_BUFFERING (prepare() nao faz nada fora de IDLE no Media3
+                    // 1.11.1) e onPlaybackStateChanged nao dispara de novo -- a cascata trava
+                    // sem timer pra proxima tentativa. O STATE_READY seguinte cancela este
+                    // timer normalmente via aoEstabilizar().
+                    cascata.aoTravar()
+                } else {
+                    // Importante 4: FalhaTerminal nao pode deixar a conexao HTTP aberta atras
+                    // do aviso de erro.
+                    exoPlayer.stop()
                 }
             }
         }
 
         cascata.iniciar()
+    }
+
+    /** Critico 3: para tudo de verdade -- coleta de eventos, timer da cascata e o player.
+     * Chamado de `AoVivoViewModel.pausar()` (ON_STOP) pra segundo plano nao poder voltar a
+     * tocar sozinho se o timer da cascata vencer com o app minimizado (o coletor de [abrir]
+     * reagiria a um `Trocou` e chamaria `play()` de novo). `retomar()` reabre o canal do zero
+     * via `selecionarCanal`, entao parar tudo aqui nao precisa ser desfeito depois. */
+    fun parar() {
+        jobColeta?.cancel()
+        jobColeta = null
+        cascataAtual?.aoEstabilizar()
+        exoPlayer.stop()
     }
 
     fun liberar() {

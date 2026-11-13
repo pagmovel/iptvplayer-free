@@ -79,7 +79,7 @@ fun Osd(
             // variante/qualidade corrente; FalhaTerminal e null nao tem uma pra destacar).
             val qualidadeAtual = when (eventoAtual) {
                 is EventoCascata.Tocando -> eventoAtual.variante.qualidade
-                is EventoCascata.Trocou -> eventoAtual.para
+                is EventoCascata.Trocou -> eventoAtual.para.qualidade
                 else -> null
             }
             fun comToque(acao: () -> Unit): () -> Unit = { aoTocarNaTela(); acao() }
@@ -128,7 +128,7 @@ fun Osd(
         if (evento != null) {
             Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.TopCenter) {
                 Text(
-                    "Mudou para ${evento.para.rotulo}",
+                    "Mudou para ${evento.para.qualidade.rotulo}",
                     color = Color.White,
                     modifier = Modifier
                         .background(Color.Black.copy(alpha = 0.7f))

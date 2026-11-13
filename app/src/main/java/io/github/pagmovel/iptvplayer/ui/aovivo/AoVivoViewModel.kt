@@ -23,6 +23,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -104,6 +106,12 @@ class AoVivoViewModel(private val app: AppIptv) {
 
     private val filtroCategoria = MutableStateFlow<Long?>(null)
     private val filtroSomenteFavoritos = MutableStateFlow(false)
+    // Revisao final (Importante 8): publico e observavel -- CanaisAba lia o filtro com um
+    // `remember` local proprio, que reiniciava pra "Todos" ao sair de composicao (trocar de
+    // aba, girar o celular) enquanto o filtro real daqui continuava valendo, deixando os
+    // chips mostrando um estado diferente do que a lista de fato usava.
+    val filtroCategoriaAtual: StateFlow<Long?> = filtroCategoria.asStateFlow()
+    val filtroSomenteFavoritosAtual: StateFlow<Boolean> = filtroSomenteFavoritos.asStateFlow()
 
     // Mesmo dispatcher do escopo interno de PlayerAoVivo (Dispatchers.Main.immediate): a
     // inscricao em cascata.eventos precisa estar ativa ANTES de selecionarCanal chamar
@@ -227,9 +235,12 @@ class AoVivoViewModel(private val app: AppIptv) {
         }
     }
 
-    /** ON_STOP (Global Constraint): pausa sem liberar o player. */
+    /** ON_STOP (Global Constraint): para de verdade, sem liberar o player -- so
+     * `exoPlayer.pause()` nao bastava (Critico 3, revisao final): o timer da cascata e a
+     * coleta de eventos continuavam vivos e podiam reabrir o play() sozinhos em segundo
+     * plano. [PlayerAoVivo.parar] cuida dos dois. */
     fun pausar() {
-        if (::playerAoVivo.isInitialized) playerAoVivo.exoPlayer.pause()
+        if (::playerAoVivo.isInitialized) playerAoVivo.parar()
     }
 
     /** ON_START: reabre o canal atual do zero -- e transmissao ao vivo, nao ha posicao pra retomar. */

@@ -32,7 +32,9 @@ import java.util.Locale
 @Composable
 fun ProgramacaoAba(viewModel: AoVivoViewModel) {
     var dia by remember { mutableStateOf(DiaPrograma.HOJE) }
-    val programas by produceState(initialValue = emptyList<Programa>(), dia) {
+    // Revisao final (Importante 6): o canal atual entra na chave -- so `dia` deixava a grade
+    // presa no canal anterior ao trocar de canal (ex. "Canal >" do OSD) com a aba aberta.
+    val programas by produceState(initialValue = emptyList<Programa>(), dia, viewModel.canalAtual) {
         value = viewModel.programacaoDoDia(dia)
     }
 

@@ -62,7 +62,7 @@ class CascataQualidadeTest {
         advanceTimeBy(TEMPO_BUFFER_MS)
         runCurrent()
 
-        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
+        assertEquals(EventoCascata.Trocou(canal.variantes[0], canal.variantes[1]), eventos.last())
 
         cascata.aoTravar()
         advanceTimeBy(TEMPO_BUFFER_MS / 2)
@@ -96,7 +96,7 @@ class CascataQualidadeTest {
         cascata.iniciar()
         cascata.aoErroDefinitivo()
 
-        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.HD), eventos.last())
+        assertEquals(EventoCascata.Trocou(canal.variantes[0], canal.variantes[1]), eventos.last())
     }
 
     @Test
@@ -169,7 +169,7 @@ class CascataQualidadeTest {
 
         // sem isso o player (que só reage a `eventos`) nunca trocaria de fato o que está
         // tocando -- achado real da T9, ver comentário em escolherManualmente
-        assertEquals(EventoCascata.Trocou(Qualidade.FHD, Qualidade.SD), eventos.last())
+        assertEquals(EventoCascata.Trocou(canal.variantes[0], canal.variantes[2]), eventos.last())
     }
 
     @Test
@@ -224,6 +224,6 @@ class CascataQualidadeTest {
 
         // a automatica voltou a agir a partir da escolha manual: degrada de novo em vez de
         // ficar travada no estado terminal antigo
-        assertEquals(EventoCascata.Trocou(Qualidade.HD, Qualidade.SD), eventos.last())
+        assertEquals(EventoCascata.Trocou(canal.variantes[0], canal.variantes[1]), eventos.last())
     }
 }

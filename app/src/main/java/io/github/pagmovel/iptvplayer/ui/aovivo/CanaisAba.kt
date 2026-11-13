@@ -20,11 +20,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -46,8 +44,12 @@ fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> 
     val chavesFavoritas = remember(favoritos) { favoritos.map { it.nomeBase to it.categoriaId }.toSet() }
     val escopo = rememberCoroutineScope()
 
-    var categoriaSelecionada by remember { mutableStateOf<Long?>(null) }
-    var somenteFavoritos by remember { mutableStateOf(false) }
+    // Revisao final (Importante 8): le o filtro ativo do ViewModel em vez de um `remember`
+    // local -- o local reiniciava pra "Todos" ao sair de composicao (trocar de aba, girar o
+    // celular) enquanto o filtro real do ViewModel continuava valendo, deixando os chips
+    // mostrando um estado diferente do que a lista de canais de fato usava.
+    val categoriaSelecionada by viewModel.filtroCategoriaAtual.collectAsState()
+    val somenteFavoritos by viewModel.filtroSomenteFavoritosAtual.collectAsState()
 
     Column(Modifier.fillMaxSize()) {
         LazyRow(
@@ -58,8 +60,6 @@ fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> 
                 FilterChip(
                     selected = categoriaSelecionada == null && !somenteFavoritos,
                     onClick = {
-                        categoriaSelecionada = null
-                        somenteFavoritos = false
                         viewModel.filtrarPorCategoria(null)
                         viewModel.filtrarFavoritos(false)
                     },
@@ -70,8 +70,6 @@ fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> 
                 FilterChip(
                     selected = somenteFavoritos,
                     onClick = {
-                        categoriaSelecionada = null
-                        somenteFavoritos = true
                         viewModel.filtrarPorCategoria(null)
                         viewModel.filtrarFavoritos(true)
                     },
@@ -82,8 +80,6 @@ fun CanaisAba(viewModel: AoVivoViewModel, onSelecionarCanal: (CanalAgrupado) -> 
                 FilterChip(
                     selected = !somenteFavoritos && categoriaSelecionada == categoria.categoriaId,
                     onClick = {
-                        categoriaSelecionada = categoria.categoriaId
-                        somenteFavoritos = false
                         viewModel.filtrarPorCategoria(categoria.categoriaId)
                         viewModel.filtrarFavoritos(false)
                     },
