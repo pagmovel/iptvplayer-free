@@ -456,3 +456,18 @@ ruling acima, sem impacto em código ou em ordem de execução.
   deferred + 1 observação fora de escopo deferred + 1 ressalva sobre testabilidade). Skill
   `.claude/skills/iptv-tv-ao-vivo/SKILL.md` ainda NÃO documenta as 3 pegadinhas deste wave —
   controlador vai atualizar agora (regra global: documentar na hora, não acumular).
+- Skill `iptv-tv-ao-vivo/SKILL.md` atualizada com as 3 pegadinhas cross-cutting (+1 achado
+  residual da T9) e o `keepScreenOn` — commit `5f42ef1`. Workspace do SDD (ledger, briefs,
+  reports, diffs) + tabela de acompanhamento do plano (T1-T10 `testada`) consolidados em
+  commit único — `6452ea2`.
+- **Push + tag v0.2.0 publicados** (eu, controlador, diretamente — nunca por subagente).
+  `git push origin main` (18 commits) confirmado chegando em `origin/main` (6452ea2).
+  `git tag v0.2.0` + `git push origin v0.2.0` confirmado em `git ls-remote --tags origin`.
+  Acompanhado via API pública do GitHub (sem `gh` CLI nesta máquina, mas o repo é público —
+  `curl` funcionou sem autenticação, run `43338532386`): job `testes` = success, job
+  `release` = success. **Release real publicada**:
+  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.2.0, anexo
+  `iptv-player-free-0.2.0.apk` (12.110.118 bytes).
+- **Task 10: complete por inteiro** (todos os 6 passos, commits 352d3da..6452ea2 + tag
+  v0.2.0). **Plano 2 completo exceto T11** (validação do dono no celular, contra o provedor
+  real — próximo passo, trabalho do dono, não dispatch).
