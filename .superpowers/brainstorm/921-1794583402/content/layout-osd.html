@@ -1,0 +1,98 @@
+<style>
+  .phone {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/8;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+  .phone .bg {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, #2a3a2a 0%, #1a2a1a 60%, #0a1a0a 100%);
+  }
+  .icon-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; background: rgba(0,0,0,0.0);
+  }
+  .icon-btn.filled { background: rgba(255,255,255,0.15); }
+  .top-left { position:absolute; top:10px; left:10px; display:flex; align-items:center; gap:10px; }
+  .top-right { position:absolute; top:10px; right:10px; display:flex; align-items:center; gap:14px; font-size:16px; opacity:0.85; }
+  .row-icons { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:28px; }
+  .info-below { position:absolute; left:24px; bottom:46px; }
+  .info-below .ch { font-weight:700; font-size:15px; }
+  .info-below .prog { font-size:12px; opacity:0.8; }
+  .quality-row { position:absolute; right:24px; bottom:46px; display:flex; gap:8px; }
+  .chip { font-size:11px; padding:3px 8px; border:1px solid rgba(255,255,255,0.4); border-radius:12px; opacity:0.75; }
+  .chip.active { background:#fff; color:#000; opacity:1; border-color:#fff; }
+
+  /* Option B: letterboxed, bars outside the video */
+  .letterbox { display:flex; flex-direction:column; height:100%; background:#101014; }
+  .bar-top { padding:8px 12px; display:flex; align-items:center; justify-content:space-between; font-size:13px; }
+  .bar-top .left { display:flex; align-items:center; gap:10px; }
+  .video-area { flex:1; position:relative; background: linear-gradient(135deg, #2a3a2a 0%, #1a2a1a 60%, #0a1a0a 100%); margin: 0 10px; }
+  .bar-bottom { padding:8px 12px; display:flex; align-items:center; justify-content:center; gap:26px; }
+  .bar-bottom .label { position:absolute; left:16px; font-size:11px; opacity:0.6; }
+</style>
+
+<h2>Layout do OSD: onde os controles ficam em relação ao vídeo</h2>
+<p class="subtitle">Baseado nas referências que você mandou — ícones universais, sem a lista de botões de texto. Clique na opção que mais se aproxima do que você quer.</p>
+
+<div class="options">
+  <div class="option" data-choice="overlay" onclick="toggleSelect(this)" style="flex-direction:column; align-items:stretch;">
+    <div class="content" style="width:100%;">
+      <h3>A — Overlay sobre o vídeo (estilo YouTube)</h3>
+      <p>Controles flutuam por cima do vídeo, que ocupa a tela toda. Nome do canal/programa abaixo dos ícones.</p>
+      <div class="phone">
+        <div class="bg"></div>
+        <div class="top-left">
+          <div class="icon-btn">←</div>
+        </div>
+        <div class="top-right">
+          <span>♡</span><span>⚙</span>
+        </div>
+        <div class="row-icons">
+          <div class="icon-btn">⏮</div>
+          <div class="icon-btn filled" style="width:56px;height:56px;font-size:26px;">⏸</div>
+          <div class="icon-btn">⏭</div>
+        </div>
+        <div class="info-below">
+          <div class="ch">WARNER CHANNEL</div>
+          <div class="prog">Two and a Half Men — Ep. 12</div>
+        </div>
+        <div class="quality-row">
+          <div class="chip">SD</div>
+          <div class="chip">HD</div>
+          <div class="chip active">FHD</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="letterbox" onclick="toggleSelect(this)" style="flex-direction:column; align-items:stretch;">
+    <div class="content" style="width:100%;">
+      <h3>B — Barras separadas (fora do vídeo)</h3>
+      <p>Faixa de informação acima do vídeo e faixa de controles abaixo, como a referência "Sample channel 1" que você mandou. O vídeo fica menor, sanduichado entre as duas.</p>
+      <div class="phone" style="padding:0;">
+        <div class="letterbox">
+          <div class="bar-top">
+            <div class="left"><span>←</span><span style="font-weight:700;">WARNER CHANNEL</span></div>
+            <div style="display:flex; gap:14px;"><span>♡</span><span>☰</span></div>
+          </div>
+          <div class="video-area"></div>
+          <div class="bar-bottom" style="position:relative;">
+            <span class="label">FHD</span>
+            <div class="icon-btn">⏮</div>
+            <div class="icon-btn filled">⏸</div>
+            <div class="icon-btn">⏭</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="label" style="margin-top:16px;">Os dois usam ícones universais (nada de texto "Canal >"). A diferença é só onde o vídeo "respira" — tela cheia com overlay (A) ou vídeo menor com barras fixas (B).</p>

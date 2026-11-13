@@ -7,31 +7,52 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
 - Plano 1 (concluído): [docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md](docs/superpowers/plans/2026-11-10-iptv-player-free-plano-1-base.md)
 - Plano atual: [docs/superpowers/plans/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md](docs/superpowers/plans/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md)
 
-## Onde paramos (2026-11-12, Plano 2 · TV ao vivo planejado e aprovado; execução não iniciada)
+## Onde paramos (2026-11-13, Plano 2 · TV ao vivo T1-T10 completo e taggeado; T11 em validação real; brainstorm do OSD em andamento)
 
-- **Plano 1 (build/CI/assinatura + contas/carga de dados) está `validada` de ponta a ponta em
-  produção**, com conta real (última Release: `v0.1.0`,
-  https://github.com/pagmovel/iptvplayer-free/releases/tag/v0.1.0). Histórico completo de
-  releases, achados reais pós-lançamento e decisões de permissão do Claude Code: ledger do SDD
-  (`.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md`) — não repetir aqui.
-- **Plano 2 (TV ao vivo) passou por brainstorming + builder-check e foi aprovado pelo dono**.
-  Design amendado em `docs/superpowers/specs/2026-11-10-iptv-player-free-design.md` (seção
-  "TV ao vivo"): canais agrupados por qualidade SD/HD/FHD/4K (confirmado com dados reais do
-  provedor — sufixo no nome, ex. "WARNER CHANNEL FHD/HD/SD"), troca automática em cascata
-  (timer de 8s configurável, reinicia por tentativa, erro definitivo troca na hora, para com
-  aviso se até o SD falhar) e manual, OSD do player, e tela nova de Configurações.
-- **Plano escrito** em `docs/superpowers/plans/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo.md`
-  (11 tarefas, T1–T11), auto-revisado contra a skill `iptv-xtream-carga` (achado real já
-  confirmado: `epg_channel_id` é igual entre variantes de qualidade do mesmo canal — item 4).
-  **Execução ainda não começou.**
-- **Próxima sessão**: escolher a abordagem de execução (subagent-driven ou nativa — perguntar
-  ao dono se ainda não escolheu) e começar pela T1 (agrupamento de canais por qualidade).
-- Fora do git, de propósito: `listas.txt` (credenciais do dono), `.env` (credenciais de
-  teste — tem seções "lista de servidores" e "LISTA M3U N"; a segunda tem credenciais
-  embutidas na URL, cuidado ao filtrar candidatos pra testar, ver skill `iptv-xtream-carga`
-  item 10), `temp/` (amostras/diagnósticos reais — nunca em teste versionado).
-- `fwcd.kotlin-0.2.36.vsix` na raiz: o dono decidiu deixar como está, sem versionar.
-- Docker Desktop local precisa estar rodando para `./scripts/gradle.ps1` funcionar.
+- **Plano 1** está `validada` de ponta a ponta em produção (última Release `v0.1.0`). Ledger:
+  `.superpowers/sdd/2026-11-10-iptv-player-free-plano-1-base/progress.md` — não repetir aqui.
+- **Plano 2 (TV ao vivo), T1-T10 completo via subagent-driven-development**: cada tarefa
+  implementada + revisada + corrigida; revisão final de toda a branch achou 3 Crítico + 6
+  Importante reais (ex. timer da cascata travava, tela apagava, vídeo tocava em segundo
+  plano) — corrigidos e re-revisados antes da tag. **Release `v0.2.0` publicada.** Detalhe
+  completo (achados, rulings, diffs): ledger
+  `.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/progress.md`.
+- **T11 (validação real do dono, no celular, contra o provedor) em andamento.** Já rendeu 2
+  patches publicados a partir de bugs reais encontrados na validação (não achados de revisão
+  de código): **`v0.2.1`** (modo imersivo real — barras do sistema escondidas em paisagem,
+  nunca implementado antes) e **`v0.2.2`** (controle nativo do ExoPlayer competindo com o
+  nosso OSD — `useController=false`; spinner de buffering, que não existia). Ambos
+  implementados, revisados e taggeados — ver ledger acima pra detalhe técnico.
+- **Validando o OSD, o dono rejeitou o layout atual** (lista de botões de texto empilhados) e
+  pediu mockups. **Brainstorm em andamento** (skill `superpowers:brainstorming`, visual
+  companion rodando em `.superpowers/brainstorm/921-1794583402/`). Decisões já fechadas
+  (não perguntar de novo):
+  - Layout: Opção A (controles em overlay sobre o vídeo, ícones universais — não a Opção B
+    de barras separadas tipo "Sample channel 1"), com scrim escuro atrás dos controles.
+  - Qualidade (SD/HD/FHD): visível só quando o OSD está aberto, ou ao trocar — não atrás de
+    engrenagem separada.
+  - Atalhos do app (Programação/Gerenciar contas/Configurações): ícones próprios na barra de
+    baixo do OSD, não um menu "mais opções".
+  - Logo do canal: no OSD e no banner de troca (estilo TV a cabo — aparece/some sozinho,
+    mesmo padrão do selo "Mudou para X" já existente) — **não** na lista de canais por
+    enquanto (precisaria de lib de imagem nova, Coil; escopo contido só ao OSD/banner).
+  - Play/pause: **lacuna real a corrigir** — sumiu ao desativar o controle nativo do
+    ExoPlayer (v0.2.2) e nunca foi recriado no nosso OSD.
+  - Spinner de carregamento do catálogo (canais/filmes/séries): anel dourado com
+    **porcentagem real** (não só visual) — vai precisar de lógica nova de progresso, maior
+    que só UI.
+  - **Adiado explicitamente pelo dono pra outra sessão** (não misturar com o OSD agora):
+    cor de destaque geral do app (rejeitou o azul `#4FC3F7` na prática, mesmo tendo aprovado
+    antes — ver memória `.claude/memory/plano2-feedback-design-t11.md`); fluxo de abertura
+    do app (tela de carregamento dedicada entre conta ativada e app pronto, hoje o progresso
+    é inline na tela de Resumo); redesign da tela de início (já sabida como provisória).
+- **Próxima sessão**: continuar o brainstorm do OSD até fechar a descrição completa →
+  builder-check → design doc → `superpowers:writing-plans` → implementar via
+  subagent-driven-development → nova tag de patch → retomar T11.
+- Fora do git, de propósito: `listas.txt`, `.env` (credenciais — ver skill
+  `iptv-xtream-carga` item 10), `temp/`.
+- `fwcd.kotlin-0.2.36.vsix` na raiz: o dono decidiu deixar sem versionar.
+- Docker Desktop local precisa estar rodando para `./scripts/gradle.ps1`.
 
 ## Regras do projeto
 

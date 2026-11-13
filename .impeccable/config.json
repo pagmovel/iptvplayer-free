@@ -83,6 +83,51 @@
         ],
         "createdAt": "2026-11-10T13:23:41.761Z",
         "reason": "Claude: esboço descartável de brainstorming, células da grade em miniatura"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/921-1794583402/content/layout-osd-v3.html"
+        ],
+        "createdAt": "2026-11-13T15:30:18.377Z",
+        "reason": "mockup descartavel de brainstorming (superpowers), nao e CSS do app real; fonte pequena simula escala de tela de celular no preview"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/921-1794583402/content/layout-osd.html"
+        ],
+        "createdAt": "2026-11-13T15:32:30.614Z",
+        "reason": "mockup descartavel de brainstorming, nao e CSS do app real"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/921-1794583402/content/layout-osd-v2.html"
+        ],
+        "createdAt": "2026-11-13T15:32:32.247Z",
+        "reason": "mockup descartavel de brainstorming, nao e CSS do app real"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/921-1794583402/content/layout-osd-v3.html"
+        ],
+        "createdAt": "2026-11-13T15:32:34.224Z",
+        "reason": "mockup descartavel de brainstorming, nao e CSS do app real"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/921-1794583402/content/loading-spinner.html"
+        ],
+        "createdAt": "2026-11-13T15:32:37.440Z",
+        "reason": "mockup descartavel de brainstorming, nao e CSS do app real"
       }
     ]
   }

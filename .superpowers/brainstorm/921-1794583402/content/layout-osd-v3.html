@@ -1,0 +1,92 @@
+<style>
+  .phone3 { position: relative; width: 100%; aspect-ratio: 16/8; background: #000; border-radius: 8px; overflow: hidden; color: #fff; font-family: system-ui, sans-serif; }
+  .phone3 .bg { position: absolute; inset: 0; background: linear-gradient(135deg, #2a3a2a 0%, #1a2a1a 60%, #0a1a0a 100%); }
+  .scrim3 { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.12) 35%, rgba(0,0,0,0.12) 65%, rgba(0,0,0,0.6) 100%); }
+  .logo-box { width:36px; height:36px; border-radius:6px; background:#3a2a0a; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+  .top-left3 { position:absolute; top:10px; left:10px; display:flex; align-items:center; gap:10px; z-index:2; }
+  .top-left3 .ch { font-weight:700; font-size:14px; }
+  .top-left3 .prog { font-size:11px; opacity:0.8; }
+  .top-right3 { position:absolute; top:6px; right:6px; display:flex; align-items:center; gap:6px; z-index:2; }
+  .ibtn { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .ibtn.filled { background: rgba(255,255,255,0.18); }
+  .row-icons3 { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:26px; z-index:2; }
+  .bottom-row3 { position:absolute; left:10px; right:10px; bottom:8px; display:flex; align-items:center; justify-content:space-between; z-index:2; }
+  .bottom-row3 .group { display:flex; gap:4px; align-items:center; }
+  .chip3 { font-size:11px; padding:3px 7px; border-radius:10px; }
+
+  .banner-demo { position:relative; width:100%; aspect-ratio:16/8; background:#000; border-radius:8px; overflow:hidden; color:#fff; font-family:system-ui,sans-serif; }
+  .banner-demo .bg2 { position:absolute; inset:0; background: linear-gradient(135deg, #1a2a3a 0%, #0a1a2a 100%); }
+  .banner { position:absolute; left:16px; bottom:16px; display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.75); padding:8px 14px; border-radius:8px; animation: fade 3s ease-in-out infinite; }
+  @keyframes fade { 0%{opacity:0;transform:translateY(6px);} 15%{opacity:1;transform:translateY(0);} 75%{opacity:1;} 100%{opacity:0;} }
+</style>
+
+<h2>Opção A — versão quase final</h2>
+<p class="subtitle">Com o que você confirmou: logo do canal, qualidade só dentro do OSD (sem engrenagem separada), atalhos em ícone na barra de baixo.</p>
+
+<div class="mockup" style="max-width:640px;">
+  <div class="mockup-body">
+    <div class="phone3">
+      <div class="bg"></div>
+      <div class="scrim3"></div>
+      <div class="top-left3">
+        <div class="ibtn">←</div>
+        <div class="logo-box">WB</div>
+        <div>
+          <div class="ch">WARNER CHANNEL</div>
+          <div class="prog">Two and a Half Men — Ep. 12</div>
+        </div>
+      </div>
+      <div class="top-right3">
+        <div class="ibtn">♡</div>
+      </div>
+      <div class="row-icons3">
+        <div class="ibtn">⏮</div>
+        <div class="ibtn filled" style="width:54px;height:54px;font-size:24px;">⏸</div>
+        <div class="ibtn">⏭</div>
+      </div>
+      <div class="bottom-row3">
+        <div class="group">
+          <span class="chip3" style="background:#fff;color:#000;">FHD</span>
+          <span class="chip3" style="opacity:0.6;">HD</span>
+          <span class="chip3" style="opacity:0.6;">SD</span>
+        </div>
+        <div class="group">
+          <span style="font-size:18px;">☰</span>
+          <span style="font-size:18px;">👤</span>
+          <span style="font-size:18px;">⚙</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="label" style="margin-top:8px;">Logo é um placeholder cinza aqui — na versão real carregaria a imagem de verdade do canal (hoje o app não carrega nenhuma logo em lugar nenhum, isso é trabalho novo: adicionar uma lib de imagem ao projeto).</p>
+
+<div class="section">
+  <h3>O banner de canal ao trocar (estilo TV a cabo) — já confirmado</h3>
+  <p class="subtitle">Aparece sozinho ao trocar de canal, alguns segundos, some sozinho — igual o selo "Mudou para X" que já existe hoje pra qualidade. Veja um "loop" simulado abaixo (ele pisca porque é uma demonstração, na vida real aparece uma vez e some):</p>
+  <div class="banner-demo">
+    <div class="bg2"></div>
+    <div class="banner">
+      <div class="logo-box">H</div>
+      <div>
+        <div style="font-weight:700; font-size:13px;">HISTORY</div>
+        <div style="font-size:11px; opacity:0.8;">O Segredo do Rancho Skinwalker</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Falta só confirmar: a logo entra também na lista de canais (aba Canais)?</h3>
+  <div class="options">
+    <div class="option" data-choice="logo-sim-lista" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><h3>Sim, logo em todo lugar</h3><p>Lista de canais, OSD e banner de troca — todos usam a logo real.</p></div>
+    </div>
+    <div class="option" data-choice="logo-so-osd" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><h3>Só no OSD/banner por agora</h3><p>A lista de canais continua com nome sobre fundo neutro; logo só aparece durante a reprodução.</p></div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,90 @@
+<style>
+  .phone2 {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/8;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+  .phone2 .bg { position: absolute; inset: 0; background: linear-gradient(135deg, #2a3a2a 0%, #1a2a1a 60%, #0a1a0a 100%); }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.15) 65%, rgba(0,0,0,0.6) 100%); }
+  .icon-btn { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .icon-btn.filled { background: rgba(255,255,255,0.18); }
+  .top-left { position:absolute; top:10px; left:10px; display:flex; align-items:center; gap:10px; z-index:2; }
+  .top-left .ch { font-weight:700; font-size:14px; }
+  .top-left .prog { font-size:11px; opacity:0.8; }
+  .top-right { position:absolute; top:6px; right:6px; display:flex; align-items:center; gap:6px; z-index:2; }
+  .row-icons { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:26px; z-index:2; }
+  .bottom-row { position:absolute; left:10px; right:10px; bottom:8px; display:flex; align-items:center; justify-content:space-between; z-index:2; }
+  .bottom-row .group { display:flex; gap:4px; }
+</style>
+
+<h2>Opção A refinada — com o layer escuro que você pediu</h2>
+<p class="subtitle">Faltam 2 decisões: onde fica o seletor de qualidade (SD/HD/FHD), e onde ficam os atalhos do app (Programação, Gerenciar contas, Configurações — esses não existem em players de vídeo comuns, são só nosso).</p>
+
+<div class="mockup" style="max-width:640px;">
+  <div class="mockup-body">
+    <div class="phone2">
+      <div class="bg"></div>
+      <div class="scrim"></div>
+      <div class="top-left">
+        <div class="icon-btn">←</div>
+        <div>
+          <div class="ch">WARNER CHANNEL</div>
+          <div class="prog">Two and a Half Men — Ep. 12</div>
+        </div>
+      </div>
+      <div class="top-right">
+        <div class="icon-btn">♡</div>
+        <div class="icon-btn">⚙</div>
+      </div>
+      <div class="row-icons">
+        <div class="icon-btn">⏮</div>
+        <div class="icon-btn filled" style="width:54px;height:54px;font-size:24px;">⏸</div>
+        <div class="icon-btn">⏭</div>
+      </div>
+      <div class="bottom-row">
+        <div class="group">
+          <span style="font-size:11px; padding:3px 7px; border-radius:10px; background:#fff; color:#000;">FHD</span>
+          <span style="font-size:11px; padding:3px 7px; opacity:0.6;">HD</span>
+          <span style="font-size:11px; padding:3px 7px; opacity:0.6;">SD</span>
+        </div>
+        <div class="group">
+          <span style="font-size:18px;">☰</span>
+          <span style="font-size:18px;">👤</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Pergunta 1 — Seletor de qualidade</h3>
+  <div class="options">
+    <div class="option" data-choice="qual-chips" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><h3>Sempre visível (como no mockup acima)</h3><p>FHD/HD/SD aparecem direto embaixo, sem precisar tocar em nada a mais.</p></div>
+    </div>
+    <div class="option" data-choice="qual-gear" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><h3>Atrás do ícone de engrenagem (⚙)</h3><p>Igual YouTube/Netflix: toca na engrenagem, abre um menu com as qualidades.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Pergunta 2 — Atalhos do app (Programação, Gerenciar contas, Configurações)</h3>
+  <div class="options">
+    <div class="option" data-choice="atalhos-icones" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><h3>Ícones próprios na barra inferior</h3><p>☰ pra Programação, 👤 pra Gerenciar contas, ⚙ só de app (separado da qualidade) pra Configurações.</p></div>
+    </div>
+    <div class="option" data-choice="atalhos-menu" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><h3>Um menu "mais opções" (⋮)</h3><p>Um único ícone de 3 pontinhos abre uma lista com Programação, Gerenciar contas e Configurações juntos — libera espaço na tela.</p></div>
+    </div>
+  </div>
+</div>

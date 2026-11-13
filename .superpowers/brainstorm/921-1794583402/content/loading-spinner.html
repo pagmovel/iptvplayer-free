@@ -1,0 +1,58 @@
+<style>
+  .loading-phone { position:relative; width:100%; max-width:340px; aspect-ratio:9/16; background:#15171c; border-radius:16px; margin:0 auto; color:#fff; font-family:system-ui,sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; }
+  .ring { width:120px; height:120px; border-radius:50%; position:relative; display:flex; align-items:center; justify-content:center; }
+  .ring svg { position:absolute; inset:0; transform:rotate(-90deg); }
+  .ring .pct { font-size:22px; font-weight:700; }
+  .msg { font-size:14px; opacity:0.85; text-align:center; padding:0 28px; max-width:260px; }
+  .back3 { position:absolute; top:14px; left:14px; width:34px; height:34px; border-radius:8px; background:rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; }
+</style>
+
+<h2>Spinner de carregamento (catálogo: canais/filmes/séries/categorias)</h2>
+<p class="subtitle">Baseado na referência que você mandou — anel dourado com porcentagem e mensagem. Uma decisão importa aqui: a % precisa ser calculada de verdade (quantos itens já vieram do provedor) ou pode ser só visual (estimativa por etapa)?</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Opção 1 — Com porcentagem real</div>
+    <div class="mockup-body">
+      <div class="loading-phone">
+        <div class="back3">←</div>
+        <div class="ring">
+          <svg width="120" height="120">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#2a2a2a" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#f5c542" stroke-width="8" stroke-dasharray="327" stroke-dashoffset="98" stroke-linecap="round"/>
+          </svg>
+          <span class="pct">70%</span>
+        </div>
+        <div class="msg" style="color:#f5c542;">Carregando canais, por favor, seja paciente...</div>
+      </div>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">Opção 2 — Sem porcentagem (visual só)</div>
+    <div class="mockup-body">
+      <div class="loading-phone">
+        <div class="back3">←</div>
+        <div class="ring">
+          <svg width="120" height="120">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#2a2a2a" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#f5c542" stroke-width="8" stroke-dasharray="80 247" stroke-linecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="1.2s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+        <div class="msg" style="color:#f5c542;">Carregando canais, por favor, seja paciente...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:16px;">
+  <div class="option" data-choice="pct-real" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content"><h3>Com % real</h3><p>Mostra o avanço de verdade (ex. canais recebidos / total). Precisa de lógica nova no carregamento — não é só troca visual.</p></div>
+  </div>
+  <div class="option" data-choice="pct-visual" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content"><h3>Só visual (anel girando)</h3><p>Mesmo anel dourado, sem número — troca só o estilo do spinner, bem mais simples de fazer.</p></div>
+  </div>
+</div>

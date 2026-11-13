@@ -1,0 +1,399 @@
+# Review package: 3d978b6611e9c436c65b0806a86b1c17f2f16c0b..HEAD
+
+## Commits
+7d32801 docs: registra relatorio do fix useController/spinner de buffering (T11)
+681bfc7 fix: desativa controle nativo do ExoPlayer e mostra spinner durante buffering
+
+## Files changed
+ .../t11-fix-useController-buffering-report.md      | 164 +++++++++++++++++++++
+ .../pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt     |  29 +++-
+ .../pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt    |  20 +++
+ .../iptvplayer/ui/aovivo/AoVivoViewModel.kt        |   4 +
+ 4 files changed, 214 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/t11-fix-useController-buffering-report.md b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/t11-fix-useController-buffering-report.md
+new file mode 100644
+index 0000000..c5e0de3
+--- /dev/null
++++ b/.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/t11-fix-useController-buffering-report.md
+@@ -0,0 +1,164 @@
++# T11 — fix: useController=false e spinner de buffering
++
++Dois bugs reais reportados pelo dono na validação manual (T11) da TV ao vivo, no celular, contra
++o provedor real. Causa raiz de ambos já confirmada no código antes de eu começar (não foi
++suposição desta sessão): print real do controle nativo do Media3 (Bug 1) e leitura de
++`AoVivoTela.kt`/`PlayerAoVivo.kt` mostrando que não existe nenhum estado de buffering exposto
++além do spinner de carregamento inicial da tela (Bug 2).
++
++## Bug 1 — controle nativo do ExoPlayer aparecia em vez do nosso OSD
++
++**Causa raiz confirmada**: `PlayerView(context).apply { player = ...; keepScreenOn = true }` em
++`AoVivoTela.kt` nunca desativava `useController`, que é `true` por padrão no Media3. Ao tocar na
++tela, o `PlayerView` mostrava seu próprio overlay (retroceder/avançar 10s, play/pause, item
++anterior/próximo de *playlist*, barra de progresso) em vez do nosso `Osd` — que é quem
++efetivamente implementa canal anterior/próximo e seletor de qualidade (o controle nativo nem
++tem esse conceito).
++
++**Fix**: adicionei `useController = false` dentro do mesmo `.apply { }` do `PlayerView`, com
++comentário explicando o motivo (arquivo `AoVivoTela.kt`, bloco do `AndroidView`).
++
++**Risco verificado antes de mexer**: li `Osd.kt` inteiro antes de desativar `useController`,
++como o prompt pedia. Confirmei que `Osd` é só `Column`/`Row`/`TextButton` de texto — não reusa
++nem depende de nenhuma parte do controle nativo do Media3. Desativar `useController` não remove
++nada que o dono via e gostava; remove só o overlay concorrente que o Media3 desenhava sozinho.
++
++## Bug 2 — sem indicador visual durante buffering
++
++**Causa raiz confirmada**: existe só 1 `CircularProgressIndicator` em `AoVivoTela.kt`, usado só
++para o carregamento INICIAL da tela (antes de `viewModel.carregar()` terminar). Nada reagia ao
++estado de buffering do player depois disso — nem `PlayerView` tinha `setShowBuffering`
++configurado (não configurei isso: optei pelo caminho (a) do prompt, StateFlow próprio, que já
++cobre os dois casos pedidos sem depender de UI nativa do Media3 — que o Bug 1 está desativando).
++
++**Onde ficou o estado de buffering, e por quê**: optei pela opção (a) sugerida no prompt —
++expor um `StateFlow<Boolean>` em `PlayerAoVivo` (não em `CascataQualidade` nem como listener
++próprio na UI), pelos seguintes motivos:
++
++- O listener (`Player.Listener.onPlaybackStateChanged`) que decide `STATE_BUFFERING`/
++  `STATE_READY` já existe em `PlayerAoVivo` e já aciona `cascata.aoTravar()`/`aoEstabilizar()`
++  nesses exatos pontos — bastou adicionar `_bufferizando.value = true/false` ao lado das
++  chamadas já existentes, sem listener novo e sem mudar a assinatura de nada.
++- `CascataQualidade` não tem acesso ao `ExoPlayer` real (é só máquina de estados com timer) —
++  colocar o estado lá exigiria `PlayerAoVivo` empurrar informação pra cascata só pra UI ler de
++  volta, uma volta desnecessária.
++- `AoVivoViewModel` já faz exatamente essa ponte pra `exoPlayer` (`val exoPlayer: ExoPlayer
++  get() = playerAoVivo.exoPlayer`) — repeti o mesmo padrão pra `bufferizando`.
++
++Implementação (`PlayerAoVivo.kt`):
++
++```kotlin
++private val _bufferizando = MutableStateFlow(false)
++val bufferizando: StateFlow<Boolean> = _bufferizando.asStateFlow()
++
++// no Player.Listener já existente:
++Player.STATE_BUFFERING -> { _bufferizando.value = true; cascataAtual?.aoTravar() }
++Player.STATE_READY -> { _bufferizando.value = false; cascataAtual?.aoEstabilizar() }
++```
++
++Cobertura dos dois casos pedidos:
++- **Troca de canal**: `abrir()` chama `setMediaItem`/`prepare`/`play` a partir do evento
++  `Tocando` inicial da cascata — isso dispara `STATE_BUFFERING` no listener normalmente (o
++  player estava `IDLE`/parado antes).
++- **Troca de qualidade da cascata**: mesmo caminho, via evento `Trocou` — a pegadinha do
++  `prepare()` chamado enquanto já em `STATE_BUFFERING` (documentada na skill) não afeta este
++  flag: se o player já estava bufferizando, o flag já era `true` e permanece `true` (não há
++  gap); se estava `READY` (troca manual com vídeo rodando liso), a transição por `READY` →
++  `IDLE` → `BUFFERING` dispara o listener normalmente.
++
++**Não aparecer sobre `FalhaTerminal`**: no ramo `else` do `collect` de `abrir()` (o ramo que
++roda quando `evento` é `FalhaTerminal`, variante `null`), adicionei `_bufferizando.value =
++false` explicitamente, antes de `exoPlayer.stop()` — não dependi de `stop()` disparar
++`STATE_READY` (ele não garante isso). Também zerei em `parar()` (ON_STOP), por defesa: evita um
++`true` preso caso o app pause durante um buffering e o estado fique visível em alguma
++recomposição futura.
++
++`AoVivoViewModel.kt`: repassa com um `get()` simples, mesmo padrão de `exoPlayer`:
++```kotlin
++val bufferizando: StateFlow<Boolean> get() = playerAoVivo.bufferizando
++```
++
++`AoVivoTela.kt`: `val bufferizando by viewModel.bufferizando.collectAsState()` (mesmo padrão já
++usado em `CanaisAba.kt` pra `filtroCategoriaAtual`), e um `CircularProgressIndicator` centrado
++sobre o vídeo quando `bufferizando == true`, desenhado entre o `AndroidView` do player e o
++`Osd` (antes do bloco de `FalhaTerminal`, que corre independente e não é afetado por esse
++`if`).
++
++## Teste automatizado — decisão de não escrever um
++
++Decidi NÃO escrever teste novo pro `bufferizando`, por dois motivos conferidos no código antes
++de decidir:
++
++1. A lógica é um mapeamento direto: `true` em `STATE_BUFFERING`, `false` em `STATE_READY` e nos
++   dois pontos de reset explícito (`FalhaTerminal`, `parar()`). Não tem branch condicional nem
++   decisão de negócio — é o mesmo nível de trivialidade das linhas vizinhas
++   (`cascataAtual?.aoTravar()`/`aoEstabilizar()`) que também nunca tiveram teste próprio.
++2. `PlayerAoVivo` nunca teve teste unitário no projeto (confirmei: não existe
++   `PlayerAoVivoTest.kt`, e o listener depende de um `ExoPlayer` real do Media3 — não é
++   Robolectric-friendly como `CatalogoDaoTest`/`ConfiguracoesRepositorioTest`, que usam
++   Robolectric só pra `Context`/banco/`WorkManager`, nunca pra media). Testar isso exigiria
++   infraestrutura nova (fake `Player`/shadow do ExoPlayer) fora de proporção pro tamanho do
++   fix.
++
++Bug 1 (useController) de fato não tem teste automatizado possível, como o prompt já antecipava
++— é propriedade de `PlayerView`, só verificável no Android real.
++
++## Evidência de build/testes
++
++Comando: `./scripts/gradle.ps1 testDebugUnitTest assembleDebug`
++
++- `BUILD SUCCESSFUL in 2m 34s` (47 actionable tasks: 11 executed, 36 up-to-date).
++- Suíte de testes: 87 testes, 0 falhas, 0 erros, em 15 suítes (confirmado somando os XMLs de
++  `app/build/test-results/testDebugUnitTest`) — mesmo total de antes (87/87), nenhum teste novo
++  adicionado (decisão acima).
++- Únicos warnings do `compileDebugKotlin` são de APIs já deprecadas e pré-existentes
++  (`LocalLifecycleOwner`, `TabRow`), nada relacionado a este fix.
++
++## Arquivos alterados
++
++- `app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt` — `_bufferizando`/
++  `bufferizando: StateFlow<Boolean>`, atualizado no listener existente e zerado em
++  `FalhaTerminal`/`parar()`.
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt` — repassa
++  `bufferizando` (mesmo padrão de `exoPlayer`).
++- `app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt` —
++  `useController = false` no `PlayerView`; `CircularProgressIndicator` condicionado a
++  `bufferizando` sobreposto ao vídeo.
++
++Commit `681bfc7` (autor/committer `Marcos Ronaldo <marcos.ronaldo@gmail.com>`, via variáveis de
++ambiente — repositório sem `user.name`/`user.email` locais, `git config` não foi tocado).
++
++## Autorrevisão (perguntas do prompt)
++
++- **Tocar na tela agora mostra só o nosso `Osd`, nunca o controle nativo do Media3?** Sim —
++  `useController = false` desativa o overlay nativo por completo; o único overlay interativo
++  que resta é o `Osd` (clicável via `.clickable` do `Box` pai, como já era). Não pude confirmar
++  no celular real (sem emulador nesta máquina, conforme `CLAUDE.md`) — fica como verificação
++  manual pendente do dono, igual às tarefas anteriores do Plano 2.
++- **O spinner aparece tanto numa troca de canal quanto numa queda de qualidade automática?**
++  Sim, pelo raciocínio de cobertura acima (ambos passam por `setMediaItem`/`prepare`/`play` a
++  partir de um evento da cascata, e o listener de `STATE_BUFFERING` não distingue a origem).
++- **O spinner some quando o vídeo volta a tocar (`STATE_READY`)?** Sim, mesmo listener zera o
++  flag em `STATE_READY`.
++- **O spinner NÃO aparece por cima do aviso de `FalhaTerminal`?** Sim — zerado explicitamente
++  no ramo `else` de `abrir()` (o ramo de `FalhaTerminal`), antes do `exoPlayer.stop()`, sem
++  depender de o player passar por `STATE_READY` nesse caminho.
++
++## Dúvidas / preocupações
++
++- **Verificação manual real ainda pendente** (sem emulador nesta máquina): os dois fixes
++  compilam e passam na suíte, mas só o dono pode confirmar no celular, contra o provedor real,
++  que o controle nativo não aparece mais e que o spinner se comporta como esperado em condições
++  reais de rede (Wi-Fi ruim, troca de qualidade em cascata).
++- **Fora do escopo desta tarefa, achado no código mas não tocado**: a skill `iptv-tv-ao-vivo`
++  documenta um `[A VERIFICAR]` existente em `CascataQualidade.escolherManualmente` (resolve por
++  `indexOfFirst { it.qualidade == qualidade }`, pode reselecionar uma variante que já falhou
++  quando duas variantes do grupo têm a mesma qualidade) — não é um dos dois bugs deste prompt,
++  não mexi nele.
++- **Alterações não commitadas de outra tarefa, não tocadas neste commit**: ao abrir o
++  repositório havia alterações pendentes que não são minhas desta sessão —
++  `.superpowers/sdd/2026-11-12-iptv-player-free-plano-2-tv-ao-vivo/progress.md` modificado, e
++  não rastreados `.claude/MEMORY.md`, `.claude/memory/`, o diff de review
++  `review-db34c75..926c4e4.diff`, `t11-fix-modo-imersivo-report.md` e `fwcd.kotlin-0.2.36.vsix`
++  na raiz. Deixei todos de fora do commit (regra global: nunca commitar alteração do usuário
++  sem perguntar) — ficam para o dono/orquestrador decidir se entram num commit separado.
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt
+index be78ffc..fb9ecb4 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/aovivo/PlayerAoVivo.kt
+@@ -3,20 +3,23 @@ package io.github.pagmovel.iptvplayer.aovivo
+ import android.content.Context
+ import androidx.media3.common.MediaItem
+ import androidx.media3.common.PlaybackException
+ import androidx.media3.common.Player
+ import androidx.media3.exoplayer.ExoPlayer
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.flow.collect
+ import kotlinx.coroutines.launch
+ 
+ /**
+  * Liga um [ExoPlayer] de verdade a [CascataQualidade] (T5): estado de buffering/pronto/erro
+  * do player alimenta a cascata, e as trocas de variante que a cascata decide trocam o
+  * [MediaItem] do player. [montarUrl] monta a URL de streaming a partir do streamId de uma
+  * variante (ver `XtreamApi.urlAoVivo`, Plano 1). [exoPlayer] é exposto pra UI (T7) ligar ao
+  * `PlayerView`/`AndroidView`.
+  *
+@@ -37,26 +40,43 @@ class PlayerAoVivo(
+ 
+     // Dispatchers.Main.immediate: chamado da thread principal (mesma do ExoPlayer), o launch
+     // em abrir() roda sincrono até a primeira suspensão -- precisa disso porque cascata.eventos
+     // é um SharedFlow sem replay (achado real da revisão da T5): se a inscrição no collect só
+     // acontecer depois de cascata.iniciar() já ter emitido, o primeiro Tocando se perde.
+     private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+ 
+     private var cascataAtual: CascataQualidade? = null
+     private var jobColeta: Job? = null
+ 
++    private val _bufferizando = MutableStateFlow(false)
++
++    /** Bug real pos-T11 (validacao manual do dono): trocar de canal/qualidade nao mostrava
++     * nada enquanto o video carregava -- so a imagem anterior congelada ou tela preta. Exposto
++     * aqui (nao em [CascataQualidade]) porque e o mesmo listener que ja reage a
++     * STATE_BUFFERING/STATE_READY pra acionar aoTravar()/aoEstabilizar() -- um StateFlow novo
++     * em vez de outro listener. Cobre carregamento inicial E toda troca de qualidade da
++     * cascata (o Media3 emite STATE_BUFFERING nos dois casos); zerado explicitamente no ramo
++     * de FalhaTerminal de [abrir] pra nao sobrar `true` por cima do aviso de erro. */
++    val bufferizando: StateFlow<Boolean> = _bufferizando.asStateFlow()
++
+     init {
+         exoPlayer.addListener(object : Player.Listener {
+             override fun onPlaybackStateChanged(playbackState: Int) {
+                 when (playbackState) {
+-                    Player.STATE_BUFFERING -> cascataAtual?.aoTravar()
+-                    Player.STATE_READY -> cascataAtual?.aoEstabilizar()
++                    Player.STATE_BUFFERING -> {
++                        _bufferizando.value = true
++                        cascataAtual?.aoTravar()
++                    }
++                    Player.STATE_READY -> {
++                        _bufferizando.value = false
++                        cascataAtual?.aoEstabilizar()
++                    }
+                 }
+             }
+ 
+             override fun onPlayerError(error: PlaybackException) {
+                 cascataAtual?.aoErroDefinitivo()
+             }
+         })
+     }
+ 
+     /**
+@@ -86,36 +106,39 @@ class PlayerAoVivo(
+                     exoPlayer.play()
+                     // Critico 2: toda variante nova comeca "carregando" do ponto de vista da
+                     // cascata. Sem isso, quando o timer da cascata vence, o ExoPlayer ja esta
+                     // em STATE_BUFFERING (prepare() nao faz nada fora de IDLE no Media3
+                     // 1.11.1) e onPlaybackStateChanged nao dispara de novo -- a cascata trava
+                     // sem timer pra proxima tentativa. O STATE_READY seguinte cancela este
+                     // timer normalmente via aoEstabilizar().
+                     cascata.aoTravar()
+                 } else {
+                     // Importante 4: FalhaTerminal nao pode deixar a conexao HTTP aberta atras
+-                    // do aviso de erro.
++                    // do aviso de erro. Zera o spinner tambem -- stop() nao garante passar por
++                    // STATE_READY, e o aviso de erro e o feedback aqui, nao o spinner.
++                    _bufferizando.value = false
+                     exoPlayer.stop()
+                 }
+             }
+         }
+ 
+         cascata.iniciar()
+     }
+ 
+     /** Critico 3: para tudo de verdade -- coleta de eventos, timer da cascata e o player.
+      * Chamado de `AoVivoViewModel.pausar()` (ON_STOP) pra segundo plano nao poder voltar a
+      * tocar sozinho se o timer da cascata vencer com o app minimizado (o coletor de [abrir]
+      * reagiria a um `Trocou` e chamaria `play()` de novo). `retomar()` reabre o canal do zero
+      * via `selecionarCanal`, entao parar tudo aqui nao precisa ser desfeito depois. */
+     fun parar() {
+         jobColeta?.cancel()
+         jobColeta = null
+         cascataAtual?.aoEstabilizar()
++        _bufferizando.value = false
+         exoPlayer.stop()
+     }
+ 
+     fun liberar() {
+         escopo.cancel()
+         exoPlayer.release()
+     }
+ }
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+index 99f5755..f8a7646 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoTela.kt
+@@ -13,20 +13,21 @@ import androidx.compose.foundation.layout.padding
+ import androidx.compose.material3.Button
+ import androidx.compose.material3.CircularProgressIndicator
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Tab
+ import androidx.compose.material3.TabRow
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.TextButton
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.produceState
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalConfiguration
+ import androidx.compose.ui.platform.LocalLifecycleOwner
+ import androidx.compose.ui.platform.LocalView
+@@ -153,25 +154,44 @@ fun AoVivoTela(
+                     .clickable(onClick = { aoTocarNaTela() }),
+             ) {
+                 AndroidView(
+                     factory = { context ->
+                         PlayerView(context).apply {
+                             player = viewModel.exoPlayer
+                             // Critico 1: sem isso o Android apaga a tela pelo timeout do
+                             // sistema e dispara ON_STOP (que pausa o player) so por falta de
+                             // toque, mesmo com o usuario assistindo.
+                             keepScreenOn = true
++                            // Bug real pos-T11 (validacao manual do dono, print real): sem
++                            // isso o controle NATIVO do Media3 (retroceder/avancar 10s, play/
++                            // pause, item anterior/proximo de playlist, barra de progresso)
++                            // aparecia ao tocar na tela em vez do nosso Osd (que tem "< Canal"/
++                            // "Canal >", qualidade, etc). useController=true e o padrao do
++                            // Media3; so o nosso Osd (acionado pelo .clickable do Box pai) pode
++                            // controlar a interacao aqui.
++                            useController = false
+                         }
+                     },
+                     modifier = Modifier.fillMaxSize(),
+                 )
+ 
++                // Bug real pos-T11: spinner de buffering sobreposto ao video -- cobre tanto o
++                // carregamento normal quanto a troca de qualidade da cascata (os dois emitem
++                // STATE_BUFFERING no PlayerAoVivo). Nao aparece sobre o aviso de FalhaTerminal
++                // porque PlayerAoVivo zera bufferizando nesse ramo (ver PlayerAoVivo.abrir).
++                val bufferizando by viewModel.bufferizando.collectAsState()
++                if (bufferizando) {
++                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++                        CircularProgressIndicator()
++                    }
++                }
++
+                 Osd(
+                     visivel = osdVisivel,
+                     canal = canalAtual,
+                     programaAtual = programaDoCanalAtual,
+                     eventoAtual = viewModel.eventoAtual,
+                     aoTocarNaTela = { aoTocarNaTela() },
+                     onVoltar = onVoltar,
+                     onEscolherQualidade = { viewModel.trocarQualidadeManual(it) },
+                     onCanalAnterior = { viewModel.canalAnterior() },
+                     onCanalProximo = { viewModel.canalProximo() },
+diff --git a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+index 25ce8b5..1df78d3 100644
+--- a/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
++++ b/app/src/main/java/io/github/pagmovel/iptvplayer/ui/aovivo/AoVivoViewModel.kt
+@@ -126,20 +126,24 @@ class AoVivoViewModel(private val app: AppIptv) {
+         private set
+ 
+     /** Canal selecionado agora -- publico desde a T9: o OSD mostra nome do canal e as
+      * variantes de qualidade, e [canalAnterior]/[canalProximo] precisam dele pra achar a
+      * posicao na lista filtrada atual. */
+     var canalAtual: CanalAgrupado? by mutableStateOf(null)
+         private set
+ 
+     val exoPlayer: ExoPlayer get() = playerAoVivo.exoPlayer
+ 
++    /** Bug real pos-T11: spinner de buffering na tela -- repassa o estado exposto por
++     * [PlayerAoVivo.bufferizando] (mesma ponte que [exoPlayer] ja faz). */
++    val bufferizando: StateFlow<Boolean> get() = playerAoVivo.bufferizando
++
+     lateinit var categorias: Flow<List<Categoria>>
+         private set
+     lateinit var favoritos: Flow<List<CanalFavorito>>
+         private set
+     lateinit var canaisFiltrados: Flow<List<CanalAgrupado>>
+         private set
+ 
+     suspend fun carregar() {
+         val conta = requireNotNull(banco.contaDao().ativa()) { "sem conta ativa" }
+         contaId = conta.id
