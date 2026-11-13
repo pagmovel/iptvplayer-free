@@ -36,19 +36,27 @@ Player de IPTV para celular Android (Kotlin), com login Xtream. O APK é gerado 
   - Logo do canal: no OSD e no banner de troca (estilo TV a cabo — aparece/some sozinho,
     mesmo padrão do selo "Mudou para X" já existente) — **não** na lista de canais por
     enquanto (precisaria de lib de imagem nova, Coil; escopo contido só ao OSD/banner).
-  - Play/pause: **lacuna real a corrigir** — sumiu ao desativar o controle nativo do
-    ExoPlayer (v0.2.2) e nunca foi recriado no nosso OSD.
+  - Play/pause: volta pro centro do OSD (⏮ / ⏸▶ / ⏭) — lacuna real que tinha sumido ao
+    desativar o controle nativo do ExoPlayer (v0.2.2), já incluída nos mockups desde a v1.
   - Spinner de carregamento do catálogo (canais/filmes/séries): anel dourado com
     **porcentagem real** (não só visual) — vai precisar de lógica nova de progresso, maior
     que só UI.
+  - **Playback completo enviado ao dono em 2026-11-13** (recapitulando todas as decisões
+    acima, com o play/pause explicitado) — **ainda sem confirmação dele**. Próxima sessão
+    começa lendo a resposta dele a esse playback antes de qualquer outra coisa.
   - **Adiado explicitamente pelo dono pra outra sessão** (não misturar com o OSD agora):
     cor de destaque geral do app (rejeitou o azul `#4FC3F7` na prática, mesmo tendo aprovado
     antes — ver memória `.claude/memory/plano2-feedback-design-t11.md`); fluxo de abertura
     do app (tela de carregamento dedicada entre conta ativada e app pronto, hoje o progresso
     é inline na tela de Resumo); redesign da tela de início (já sabida como provisória).
-- **Próxima sessão**: continuar o brainstorm do OSD até fechar a descrição completa →
+- **Próxima sessão**: ler a resposta do dono ao playback do OSD (confirmação ou ajuste) →
   builder-check → design doc → `superpowers:writing-plans` → implementar via
-  subagent-driven-development → nova tag de patch → retomar T11.
+  subagent-driven-development → nova tag de patch → retomar T11. **Nenhuma linha de código do
+  OSD foi escrita ainda** — é só brainstorm/mockup até aqui (gate da skill de brainstorming:
+  nada se constrói sem aprovação da descrição completa).
+- **`v0.2.2` continua sendo a última release publicada** — nada mudou em `app/` desde então
+  (só docs/memória/mockups), por isso nenhuma tag nova foi gerada nesta sessão. Só cortar tag
+  nova quando houver mudança real de código.
 - Fora do git, de propósito: `listas.txt`, `.env` (credenciais — ver skill
   `iptv-xtream-carga` item 10), `temp/`.
 - `fwcd.kotlin-0.2.36.vsix` na raiz: o dono decidiu deixar sem versionar.
